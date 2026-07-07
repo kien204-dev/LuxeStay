@@ -154,10 +154,12 @@ export default function Rooms() {
       return;
 
     setDeletingId(room.id);
+    setError("");
     try {
       await deleteRoom(room.id);
       setRooms((list) => list.filter((r) => r.id !== room.id));
     } catch (err) {
+      setError(err.response?.data?.message || "Xoa phong that bai");
       alert(err.response?.data?.message || "Xóa phòng thất bại");
     } finally {
       setDeletingId(null);
@@ -185,7 +187,7 @@ export default function Rooms() {
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: 12 }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", width: "min(100%, 520px)" }}>
           <input
             type="text"
             placeholder="Tìm theo tên hoặc loại phòng..."
@@ -198,7 +200,8 @@ export default function Rooms() {
               padding: "10px 14px",
               color: "#dee5ff",
               fontSize: 14,
-              minWidth: 220,
+              minWidth: 0,
+              flex: "1 1 220px",
             }}
           />
 
@@ -213,6 +216,7 @@ export default function Rooms() {
               fontWeight: 700,
               cursor: "pointer",
               whiteSpace: "nowrap",
+              flex: "0 0 auto",
             }}
           >
             + Thêm phòng

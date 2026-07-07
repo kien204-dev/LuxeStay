@@ -67,7 +67,27 @@ export default function MyBookings() {
       className="font-body"
       style={{ minHeight: "100vh", background: "#fafafa", color: "#1A1C1E" }}
     >
+      <style>{`
+        @media (max-width: 720px) {
+          .my-bookings-header {
+            align-items: flex-start !important;
+            flex-direction: column !important;
+            padding: 14px 18px !important;
+          }
+          .my-booking-card {
+            grid-template-columns: 1fr !important;
+          }
+          .my-booking-image {
+            min-height: 180px !important;
+          }
+          .my-booking-actions {
+            align-items: flex-start !important;
+            padding-top: 0 !important;
+          }
+        }
+      `}</style>
       <header
+        className="my-bookings-header"
         style={{
           background: "#fff",
           borderBottom: "1px solid #e2e8f0",
@@ -163,6 +183,7 @@ export default function MyBookings() {
 
               return (
                 <div
+                  className="my-booking-card"
                   key={b.id}
                   style={{
                     background: "#fff",
@@ -175,6 +196,7 @@ export default function MyBookings() {
                   }}
                 >
                   <div
+                    className="my-booking-image"
                     style={{
                       backgroundImage: b.room_image
                         ? `url(${b.room_image})`
@@ -227,6 +249,7 @@ export default function MyBookings() {
                     </p>
                   </div>
                   <div
+                    className="my-booking-actions"
                     style={{
                       padding: "20px 24px",
                       display: "flex",

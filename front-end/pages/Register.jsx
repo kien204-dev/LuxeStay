@@ -159,7 +159,7 @@ const handleChange = (e) => {
 
             {/* CONTENT — căn giữa, chiếm hết không gian còn lại */}
             <div className="flex-grow flex items-center justify-center px-4 py-12">
-                <div className="w-full max-w-lg bg-[#192540]/60 backdrop-blur-[24px] rounded-xl p-8 shadow">
+                <div className="w-full max-w-lg bg-[#192540]/60 backdrop-blur-[24px] rounded-xl p-6 md:p-8 shadow">
 
                     {/* TITLE */}
                     <div className="text-center mb-8">
@@ -232,7 +232,7 @@ const handleChange = (e) => {
             </div>
 
             {/* FOOTER — dưới cùng, full width */}
-            <footer className="px-8 pb-6 pt-4 border-t border-[#40485d]/30">
+            <footer className="px-4 md:px-8 pb-6 pt-4 border-t border-[#40485d]/30">
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-[#a3aac4] text-sm">
                     <div className="flex gap-6">
                         <a className="hover:text-[#dee5ff] transition-colors" href="#">Chính sách bảo mật</a>

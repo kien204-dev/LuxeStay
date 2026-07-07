@@ -241,7 +241,7 @@ export default function Dashboard() {
       </div>
 
       <main style={{ flex: 1, padding: "28px 32px", overflowY: "auto", position: "relative", zIndex: 1 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 28 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, marginBottom: 28, flexWrap: "wrap" }}>
           <div>
             <h1 style={{ fontSize: 24, fontWeight: 800, color: "#dee5ff", margin: 0, letterSpacing: "-0.02em" }}>Admin Dashboard</h1>
             <p style={{ color: "#5a6480", fontSize: 13, margin: "4px 0 0" }}>

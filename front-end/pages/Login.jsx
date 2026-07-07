@@ -136,7 +136,7 @@ useEffect(() => {
 
       {/* HEADER */}
       <header className="relative z-50 bg-[#060e20]/60 backdrop-blur-2xl">
-        <nav className="flex justify-between items-center px-12 py-5 max-w-7xl mx-auto">
+        <nav className="flex justify-between items-center px-4 md:px-12 py-5 max-w-7xl mx-auto">
           <div className="flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-[#9fa7ff]" fill="currentColor" viewBox="0 0 24 24">
               <path d="M7 13c1.66 0 3-1.34 3-3S8.66 7 7 7s-3 1.34-3 3 1.34 3 3 3zm12-6h-8v7H3V5H1v15h2v-3h18v3h2v-9c0-2.21-1.79-4-4-4z" />
@@ -155,7 +155,7 @@ useEffect(() => {
 
       {/* MAIN */}
       <main className="flex-grow flex items-center justify-center px-4 py-12 relative z-10">
-        <div className="w-full max-w-[480px] bg-[#192540]/60 backdrop-blur-[24px] rounded-xl p-8 md:p-12 shadow-[0_0_80px_rgba(159,167,255,0.08)] border border-[#40485d]/20">
+        <div className="w-full max-w-[480px] bg-[#192540]/60 backdrop-blur-[24px] rounded-xl p-6 md:p-12 shadow-[0_0_80px_rgba(159,167,255,0.08)] border border-[#40485d]/20">
 
           <div className="text-center mb-10">
             <h1 className="text-4xl font-extrabold text-[#9fa7ff] mb-4">Welcome</h1>
@@ -268,7 +268,7 @@ useEffect(() => {
 
         </div>
       </main>
-      <footer className="px-8 pb-6 pt-4 border-t border-[#40485d]/30">
+      <footer className="px-4 md:px-8 pb-6 pt-4 border-t border-[#40485d]/30">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-[#a3aac4] text-sm">
           <div className="flex gap-6">
             <a className="hover:text-[#dee5ff] transition-colors" href="#">Chính sách bảo mật</a>
