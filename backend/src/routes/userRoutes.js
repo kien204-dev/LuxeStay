@@ -9,14 +9,24 @@ const {
   deleteUser,
 } = require("../controller/userController.js");
 
-router.get("/users", getUsers);
+const {
+  verifyToken,
+  checkRole,
+} = require("../middleware/authMiddleware");
 
-router.get("/users/:id", getUserById);
+// Chỉ admin mới được xem danh sách user
+router.get("/users", verifyToken, checkRole("admin"), getUsers);
 
-router.post("/users", createUser);
+// Chỉ admin mới được xem chi tiết user
+router.get("/users/:id", verifyToken, checkRole("admin"), getUserById);
 
-router.put("/users/:id", updateUser);
+// Chỉ admin mới được tạo user
+router.post("/users", verifyToken, checkRole("admin"), createUser);
 
-router.delete("/users/:id", deleteUser);
+// Chỉ admin mới được sửa user
+router.put("/users/:id", verifyToken, checkRole("admin"), updateUser);
+
+// Chỉ admin mới được xóa user
+router.delete("/users/:id", verifyToken, checkRole("admin"), deleteUser);
 
 module.exports = router;

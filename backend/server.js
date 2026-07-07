@@ -5,17 +5,24 @@ const cors = require("cors");
 
 const app = express();
 
+const PORT = process.env.PORT || 3001;
+
 const userRoutes = require("./src/routes/userRoutes");
 const authRoutes = require("./src/routes/auth");
+const bookingRoutes = require("./src/routes/bookings");
+const dashboardRoutes = require("./src/routes/dashboardRoutes");
+const roomRoutes = require("./src/routes/roomRoutes");
 
-app.use(cors({
-  origin: "http://localhost:5173",
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+  })
+);
 
 app.use(express.json());
 
-// Test route
+// Test API
 app.get("/", (req, res) => {
   res.send("Backend is running");
 });
@@ -23,7 +30,17 @@ app.get("/", (req, res) => {
 // Routes
 app.use("/api", authRoutes);
 app.use("/api", userRoutes);
+app.use("/api/bookings", bookingRoutes);
+app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/rooms", roomRoutes);
 
-app.listen(3001, () => {
-  console.log("Server chạy tại http://localhost:3001");
+// 404
+app.use((req, res) => {
+  res.status(404).json({
+    message: "API không tồn tại",
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
 });

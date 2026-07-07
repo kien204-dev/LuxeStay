@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  content: ["./index.html", "./front-end/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       colors: {
@@ -12,18 +12,13 @@ export default {
         "card-dark": "#161B26",
         "border-dark": "#2D3748",
       },
-    },
-
       fontFamily: {
-        sans: ["Inter", "sans-serif"],
+        headline: ["Noto Serif", "serif"],
+        body: ["Manrope", "sans-serif"],
+        label: ["Manrope", "sans-serif"],
+        sans: ["Manrope", "sans-serif"],
       },
-    fontFamily: {
-      headline: ["Noto Serif", "serif"],
-      body: ["Manrope", "sans-serif"],
-      label: ["Manrope", "sans-serif"],
-      sans: ["Manrope", "sans-serif"]
     },
   },
-},
-plugins: [],
-}
+  plugins: [],
+};
