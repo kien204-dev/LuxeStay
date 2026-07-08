@@ -4,9 +4,16 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 
+require("./src/db/db");
+
 const app = express();
 
 const PORT = process.env.PORT || 3001;
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  process.env.FRONTEND_URL,
+  "http://localhost:5173",
+].filter(Boolean);
 
 const userRoutes = require("./src/routes/userRoutes");
 const authRoutes = require("./src/routes/auth");
@@ -16,7 +23,7 @@ const roomRoutes = require("./src/routes/roomRoutes");
 
 app.use(
   cors({
-    origin: true,
+    origin: allowedOrigins,
     credentials: true,
   })
 );
