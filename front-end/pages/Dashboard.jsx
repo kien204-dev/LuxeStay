@@ -3,8 +3,12 @@ import Icon from "../utils/icon";
 import RevenueChart from "../layout/components/chart/RevenueChart";
 import OccupancyChart from "../layout/components/chart/OccupancyChart";
 import BookingStatusChart from "../layout/components/chart/BookingStatusChart";
-import { getDashboardStats } from "../services/dashboardService";
-import { getBookings } from "../services/bookingService";
+import BookingsByMonthChart from "../layout/components/chart/BookingsByMonthChart";
+import TopRoomsChart from "../layout/components/chart/TopRoomsChart";
+import {
+  getDashboardAnalytics,
+  getDashboardStats,
+} from "../services/dashboardService";
 
 const DEFAULT_STATS = {
   totalRooms: 0,
@@ -15,11 +19,19 @@ const DEFAULT_STATS = {
   revenue: 0,
 };
 
-const STATUS_COLORS = {
-  confirmed: "#67e8b4",
-  pending: "#fbbf24",
-  completed: "#9fa7ff",
-  cancelled: "#f87171",
+const DEFAULT_ANALYTICS = {
+  revenueByMonth: [],
+  bookingsByMonth: [],
+  bookingsByStatus: [],
+  topRooms: [],
+  occupancy: {
+    totalRooms: 0,
+    bookedRooms: 0,
+    availableRooms: 0,
+    maintenanceRooms: 0,
+    occupancyRate: 0,
+  },
+  recentBookings: [],
 };
 
 const statusStyle = {
@@ -40,6 +52,35 @@ function normalizeStats(stats) {
   };
 }
 
+function normalizeAnalytics(analytics) {
+  return {
+    revenueByMonth: Array.isArray(analytics?.revenueByMonth)
+      ? analytics.revenueByMonth
+      : [],
+    bookingsByMonth: Array.isArray(analytics?.bookingsByMonth)
+      ? analytics.bookingsByMonth
+      : [],
+    bookingsByStatus: Array.isArray(analytics?.bookingsByStatus)
+      ? analytics.bookingsByStatus.map((item) => ({
+        name: item.status || "pending",
+        value: Number(item.count) || 0,
+        color: item.color || "#94a3b8",
+      }))
+      : [],
+    topRooms: Array.isArray(analytics?.topRooms) ? analytics.topRooms : [],
+    occupancy: {
+      totalRooms: Number(analytics?.occupancy?.totalRooms) || 0,
+      bookedRooms: Number(analytics?.occupancy?.bookedRooms) || 0,
+      availableRooms: Number(analytics?.occupancy?.availableRooms) || 0,
+      maintenanceRooms: Number(analytics?.occupancy?.maintenanceRooms) || 0,
+      occupancyRate: Number(analytics?.occupancy?.occupancyRate) || 0,
+    },
+    recentBookings: Array.isArray(analytics?.recentBookings)
+      ? analytics.recentBookings
+      : [],
+  };
+}
+
 function formatMoney(value) {
   return `${(Number(value) || 0).toLocaleString("vi-VN")} VND`;
 }
@@ -49,41 +90,6 @@ function formatDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
   return date.toLocaleDateString("vi-VN");
-}
-
-function buildBookingStatusData(bookings) {
-  const counts = bookings.reduce((acc, booking) => {
-    const status = booking.status || "pending";
-    acc[status] = (acc[status] || 0) + 1;
-    return acc;
-  }, {});
-
-  return Object.entries(counts).map(([name, value]) => ({
-    name,
-    value,
-    color: STATUS_COLORS[name] || "#94a3b8",
-  }));
-}
-
-function buildRevenueData(bookings) {
-  const now = new Date();
-  const months = Array.from({ length: 12 }, (_, index) => {
-    const date = new Date(now.getFullYear(), index, 1);
-    return {
-      month: date.toLocaleString("en-US", { month: "short" }),
-      revenue: 0,
-    };
-  });
-
-  bookings
-    .filter((booking) => ["confirmed", "completed"].includes(booking.status))
-    .forEach((booking) => {
-      const date = new Date(booking.created_at || booking.check_in);
-      if (Number.isNaN(date.getTime()) || date.getFullYear() !== now.getFullYear()) return;
-      months[date.getMonth()].revenue += Number(booking.total_price) || 0;
-    });
-
-  return months;
 }
 
 function StatCard({ label, value, note, icon, color }) {
@@ -139,7 +145,7 @@ function StatCard({ label, value, note, icon, color }) {
 
 export default function Dashboard() {
   const [stats, setStats] = useState(DEFAULT_STATS);
-  const [bookings, setBookings] = useState([]);
+  const [analytics, setAnalytics] = useState(DEFAULT_ANALYTICS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -148,17 +154,17 @@ export default function Dashboard() {
       setLoading(true);
       setError("");
 
-      const [statsData, bookingsResponse] = await Promise.all([
+      const [statsData, analyticsData] = await Promise.all([
         getDashboardStats(),
-        getBookings(),
+        getDashboardAnalytics(),
       ]);
 
       setStats(normalizeStats(statsData));
-      setBookings(Array.isArray(bookingsResponse.data) ? bookingsResponse.data : []);
+      setAnalytics(normalizeAnalytics(analyticsData));
     } catch (err) {
       setError(err.response?.data?.message || "Cannot load dashboard data");
       setStats(DEFAULT_STATS);
-      setBookings([]);
+      setAnalytics(DEFAULT_ANALYTICS);
     } finally {
       setLoading(false);
     }
@@ -168,9 +174,9 @@ export default function Dashboard() {
     loadDashboard();
   }, []);
 
-  const occupancyRate = stats.totalRooms
-    ? Math.round((stats.bookedRooms / stats.totalRooms) * 100)
-    : 0;
+  const occupancyRate = analytics.occupancy.occupancyRate || (
+    stats.totalRooms ? Math.round((stats.bookedRooms / stats.totalRooms) * 100) : 0
+  );
 
   const statCards = [
     {
@@ -217,13 +223,15 @@ export default function Dashboard() {
     },
   ];
 
-  const bookingStatusData = useMemo(() => buildBookingStatusData(bookings), [bookings]);
-  const revenueData = useMemo(() => buildRevenueData(bookings), [bookings]);
+  const bookingStatusData = useMemo(() => analytics.bookingsByStatus, [analytics.bookingsByStatus]);
+  const revenueData = useMemo(() => analytics.revenueByMonth, [analytics.revenueByMonth]);
+  const bookingsByMonthData = useMemo(() => analytics.bookingsByMonth, [analytics.bookingsByMonth]);
+  const topRoomsData = useMemo(() => analytics.topRooms, [analytics.topRooms]);
   const occupancyData = useMemo(
     () => [{ month: "Current", value: occupancyRate }],
     [occupancyRate]
   );
-  const recentBookings = useMemo(() => bookings.slice(0, 5), [bookings]);
+  const recentBookings = useMemo(() => analytics.recentBookings, [analytics.recentBookings]);
 
   return (
     <div style={{
@@ -409,6 +417,48 @@ export default function Dashboard() {
                 </h3>
               </div>
               <RevenueChart data={revenueData} />
+            </div>
+
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: 20,
+              marginTop: 20,
+            }}>
+              <div style={{
+                background: "rgba(25,37,64,0.6)",
+                border: "1px solid rgba(64,72,93,0.3)",
+                borderRadius: 16,
+                padding: 20,
+              }}>
+                <div style={{ marginBottom: 12 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: "#dee5ff" }}>
+                    Bookings By Month
+                  </h3>
+                </div>
+                <BookingsByMonthChart data={bookingsByMonthData} />
+              </div>
+
+              <div style={{
+                background: "rgba(25,37,64,0.6)",
+                border: "1px solid rgba(64,72,93,0.3)",
+                borderRadius: 16,
+                padding: 20,
+              }}>
+                <div style={{ marginBottom: 12 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: "#dee5ff" }}>
+                    Top Booked Rooms
+                  </h3>
+                </div>
+
+                {topRoomsData.length === 0 ? (
+                  <div style={{ padding: 24, textAlign: "center", color: "#5a6480" }}>
+                    No room booking data.
+                  </div>
+                ) : (
+                  <TopRoomsChart data={topRoomsData} />
+                )}
+              </div>
             </div>
 
             <div style={{

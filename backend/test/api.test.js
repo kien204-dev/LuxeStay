@@ -228,7 +228,7 @@ function makeFakePool(state) {
       return { rows: [] };
     }
 
-    if (text.includes('as "totalrooms"')) {
+    if (text.includes('as "totalrooms"') && text.includes('as "totalusers"')) {
       const revenue = state.bookings
         .filter((item) => ["confirmed", "completed"].includes(item.status))
         .reduce((sum, item) => sum + Number(item.total_price), 0);
@@ -241,6 +241,95 @@ function makeFakePool(state) {
             totalUsers: state.users.length,
             totalBookings: state.bookings.length,
             revenue,
+          },
+        ],
+      };
+    }
+
+    if (text.includes("extract(month") && text.includes("sum(total_price)")) {
+      const rowsByMonth = new Map();
+
+      state.bookings
+        .filter((item) => ["confirmed", "completed"].includes(item.status))
+        .forEach((booking) => {
+          const date = new Date(booking.created_at || booking.check_in);
+          const month = date.getMonth() + 1;
+          rowsByMonth.set(
+            month,
+            (rowsByMonth.get(month) || 0) + Number(booking.total_price)
+          );
+        });
+
+      return {
+        rows: Array.from(rowsByMonth.entries()).map(([month, revenue]) => ({
+          month,
+          revenue,
+        })),
+      };
+    }
+
+    if (text.includes("extract(month") && text.includes("count(*)::int as bookings")) {
+      const rowsByMonth = new Map();
+
+      state.bookings.forEach((booking) => {
+        const date = new Date(booking.created_at || booking.check_in);
+        const month = date.getMonth() + 1;
+        rowsByMonth.set(month, (rowsByMonth.get(month) || 0) + 1);
+      });
+
+      return {
+        rows: Array.from(rowsByMonth.entries()).map(([month, bookings]) => ({
+          month,
+          bookings,
+        })),
+      };
+    }
+
+    if (text.includes("from bookings") && text.includes("group by status")) {
+      const counts = state.bookings.reduce((acc, booking) => {
+        acc[booking.status] = (acc[booking.status] || 0) + 1;
+        return acc;
+      }, {});
+
+      return {
+        rows: Object.entries(counts).map(([status, count]) => ({
+          status,
+          count,
+        })),
+      };
+    }
+
+    if (text.includes("from rooms r") && text.includes("join bookings b")) {
+      const rows = state.rooms
+        .map((room) => {
+          const bookings = state.bookings.filter((booking) => booking.room_id === room.id);
+          const revenue = bookings
+            .filter((booking) => ["confirmed", "completed"].includes(booking.status))
+            .reduce((sum, booking) => sum + Number(booking.total_price), 0);
+
+          return {
+            room_id: room.id,
+            room_name: room.room_name,
+            room_type: room.room_type,
+            booking_count: bookings.length,
+            revenue,
+          };
+        })
+        .filter((room) => room.booking_count > 0)
+        .sort((a, b) => b.booking_count - a.booking_count || b.revenue - a.revenue)
+        .slice(0, 5);
+
+      return { rows };
+    }
+
+    if (text.includes("from rooms") && text.includes("filter (where status = 'booked')")) {
+      return {
+        rows: [
+          {
+            totalRooms: state.rooms.length,
+            bookedRooms: state.rooms.filter((item) => item.status === "booked").length,
+            availableRooms: state.rooms.filter((item) => item.status === "available").length,
+            maintenanceRooms: state.rooms.filter((item) => item.status === "maintenance").length,
           },
         ],
       };
@@ -640,6 +729,28 @@ describe("hotel booking API", () => {
     assert.equal(stats.body.totalRooms, 3);
     assert.ok(stats.body.totalUsers >= 3);
     assert.ok(stats.body.totalBookings >= 2);
+  });
+
+  it("returns dashboard analytics for admin only", async () => {
+    const forbidden = await request(baseUrl, "/api/dashboard/analytics", {
+      headers: authHeader(userToken),
+    });
+    assert.equal(forbidden.response.status, 403);
+
+    const analytics = await request(baseUrl, "/api/dashboard/analytics", {
+      headers: authHeader(adminToken),
+    });
+
+    assert.equal(analytics.response.status, 200);
+    assert.equal(analytics.body.revenueByMonth.length, 12);
+    assert.equal(analytics.body.bookingsByMonth.length, 12);
+    assert.ok(
+      analytics.body.bookingsByStatus.some((item) => item.status === "confirmed")
+    );
+    assert.ok(analytics.body.topRooms.length > 0);
+    assert.equal(analytics.body.occupancy.totalRooms, state.rooms.length);
+    assert.equal(typeof analytics.body.occupancy.occupancyRate, "number");
+    assert.ok(Array.isArray(analytics.body.recentBookings));
   });
 
   it("scopes bookings by role and validates booking payloads", async () => {
