@@ -137,7 +137,18 @@ function App() {
       <Route
         path="/settings"
         element={
-          <PrivateRoute role="admin">
+          <PrivateRoute>
+            <MainLayout>
+              <Settings />
+            </MainLayout>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/profile"
+        element={
+          <PrivateRoute>
             <MainLayout>
               <Settings />
             </MainLayout>

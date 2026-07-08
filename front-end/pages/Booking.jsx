@@ -577,10 +577,14 @@ function Booking() {
                                                 />
                                                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.18) 0%, transparent 50%)" }} />
                                                 <div style={{ position: "absolute", top: 14, right: 14, background: "#C5A059", color: "#000", padding: "4px 12px", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.15em", fontWeight: 700 }}>{Number(price).toLocaleString("vi-VN")} đ/đêm</div>
+                                                <div style={{ position: "absolute", bottom: 14, left: 14, background: "rgba(0,35,102,0.82)", color: "#fff", padding: "5px 12px", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700, borderRadius: 4 }}>Tối đa {capacity} khách</div>
                                             </div>
                                             <div style={{ padding: 28 }}>
                                                 <h3 className="font-headline" style={{ fontSize: 20, color: "#002366", marginBottom: 10, marginTop: 0, lineHeight: 1.3 }}>{name}</h3>
                                                 <p style={{ color: "#6b7280", fontSize: 13, lineHeight: 1.7, marginBottom: 20 }}>{desc}</p>
+                                                <p style={{ color: "#002366", fontSize: 12, textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700, margin: "0 0 18px" }}>
+                                                    Sức chứa tối đa: {capacity} khách
+                                                </p>
                                                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderTop: "1px solid rgba(0,0,0,0.06)", paddingTop: 20 }}>
                                                     <div style={{ display: "flex", gap: 8 }}>
                                                         {icons.map((icon) => (
@@ -636,17 +640,16 @@ function Booking() {
                         </div>
                         <div className="suite-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 40 }}>
                             {[
-                                { name: "The Royal Heritage", location: "Lake Como, Italy", price: "€1,250", amenities: [["spa", "Spa"], ["pool", "Infinity Pool"], ["restaurant", "Michelin Star"]], img: "https://lh3.googleusercontent.com/aida-public/AB6AXuAYN5w-_7gAhweJe8N6tWrBo3cRg2J4JIFXUCMvzMXuZh_eLgTSg9VncSjFY22Dd-kg9Mj_1emiC4wdb4FbcflklVTz6wRQsgMVVREqVRfxtCXAm0nt_rJSM845zVtXyhKxUXKjE2AWwHaDFNjQF8GmzPvYyR7FYjpP7iAnmZUeB-NN0lEHJjyBSZrV5OuX98KZ-xe3P_14VFSg1YPAZQodNDyEJ8Aie9uSGswJWI8BbYzi0CiCa2MYc6e7o-kDJYKaUWg_gVzKQ1U" },
-                                { name: "Aman Zenith", location: "Kyoto, Japan", price: "¥240,000", amenities: [["mode", "Zen Garden"], ["hot_tub", "Onsen"], ["concierge", "Private Butler"]], img: "https://lh3.googleusercontent.com/aida-public/AB6AXuAl5hm6dd_3xwJdHDGs4CX0GNWvMqTb0q-eTttwfL1aN1Uy1BPiWnPUlg3_CEU-OUCW3PdYfrySmSLX63VYd1gmyhqkqHeEXGyS7B6Xgr2mMj_i43yFwhfitA7babphjGnBrRT_kweSSDrqPYlaFzLN-pZqI6fDSv_sfQduGKHfgwJ5DZvY5If7ZZ8mQs62x8XePDEJCl4Cg6M0-M01AY9Y9BebuUt8K2QGEczRI6NIchfyv7ks82pd4lVXLssuPGGSEA3oz1pViPE" },
-                                { name: "Azure Bay Resort", location: "Bora Bora", price: "$3,400", amenities: [["waves", "Private Beach"], ["sailing", "Yacht Access"], ["scuba_diving", "Diving"]], img: "https://lh3.googleusercontent.com/aida-public/AB6AXuBRgQpVx28Yubn_M3-wWZVRpuixG91q_izclCliw81aah5sMT8o1RZyq_ZZv5rnWbwtQhaHof756HtF-zVCEDc4OOP9pdTwTHDwVQHT0j9Yfz7XO2bYkNJik1anS_NKiCQmKlU7WPSLMQvHyrROENFT6lgpbixmtxWIeDVx_uaHxQOwypYUjPkJVMiMQwfh-ywAw9BLAogsrVSrcxQFKsDYttnkcks1S-lvwfAih2HovGzukkOTLRdpgcBg7IhTIXpfOC3bdn2hZ4s" },
-                            ].map(({ name, location, price, amenities, img }) => (
+                                { name: "The Royal Heritage", location: "Lake Como, Italy", amenities: [["spa", "Spa"], ["pool", "Infinity Pool"], ["restaurant", "Michelin Star"]], img: "https://lh3.googleusercontent.com/aida-public/AB6AXuAYN5w-_7gAhweJe8N6tWrBo3cRg2J4JIFXUCMvzMXuZh_eLgTSg9VncSjFY22Dd-kg9Mj_1emiC4wdb4FbcflklVTz6wRQsgMVVREqVRfxtCXAm0nt_rJSM845zVtXyhKxUXKjE2AWwHaDFNjQF8GmzPvYyR7FYjpP7iAnmZUeB-NN0lEHJjyBSZrV5OuX98KZ-xe3P_14VFSg1YPAZQodNDyEJ8Aie9uSGswJWI8BbYzi0CiCa2MYc6e7o-kDJYKaUWg_gVzKQ1U" },
+                                { name: "Aman Zenith", location: "Kyoto, Japan", amenities: [["mode", "Zen Garden"], ["hot_tub", "Onsen"], ["concierge", "Private Butler"]], img: "https://lh3.googleusercontent.com/aida-public/AB6AXuAl5hm6dd_3xwJdHDGs4CX0GNWvMqTb0q-eTttwfL1aN1Uy1BPiWnPUlg3_CEU-OUCW3PdYfrySmSLX63VYd1gmyhqkqHeEXGyS7B6Xgr2mMj_i43yFwhfitA7babphjGnBrRT_kweSSDrqPYlaFzLN-pZqI6fDSv_sfQduGKHfgwJ5DZvY5If7ZZ8mQs62x8XePDEJCl4Cg6M0-M01AY9Y9BebuUt8K2QGEczRI6NIchfyv7ks82pd4lVXLssuPGGSEA3oz1pViPE" },
+                                { name: "Azure Bay Resort", location: "Bora Bora", amenities: [["waves", "Private Beach"], ["sailing", "Yacht Access"], ["scuba_diving", "Diving"]], img: "https://lh3.googleusercontent.com/aida-public/AB6AXuBRgQpVx28Yubn_M3-wWZVRpuixG91q_izclCliw81aah5sMT8o1RZyq_ZZv5rnWbwtQhaHof756HtF-zVCEDc4OOP9pdTwTHDwVQHT0j9Yfz7XO2bYkNJik1anS_NKiCQmKlU7WPSLMQvHyrROENFT6lgpbixmtxWIeDVx_uaHxQOwypYUjPkJVMiMQwfh-ywAw9BLAogsrVSrcxQFKsDYttnkcks1S-lvwfAih2HovGzukkOTLRdpgcBg7IhTIXpfOC3bdn2hZ4s" },
+                            ].map(({ name, location, amenities, img }) => (
                                 <div key={name} style={{ background: "#fff", overflow: "hidden" }}>
                                     <div
                                         onClick={() =>
                                             openBookingModal({
                                                 name,
                                                 location,
-                                                price,
                                                 img,
                                                 type: "Suite Room",
                                                 desc: "Luxury suite room with premium services and elegant design.",
@@ -687,7 +690,7 @@ function Booking() {
                                                 borderRadius: 4,
                                             }}
                                         >
-                                            Click to book
+                                            Showcase only
                                         </div>
                                     </div>
                                     <div style={{ padding: 32 }}>
@@ -700,8 +703,8 @@ function Booking() {
                                                 </p>
                                             </div>
                                             <div style={{ textAlign: "right", flexShrink: 0 }}>
-                                                <p className="font-headline" style={{ fontSize: 22, color: "#C5A059", margin: 0 }}>{price}</p>
-                                                <p style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.15em", color: "#94a3b8", margin: "2px 0 0" }}>Per Night</p>
+                                                <p className="font-headline" style={{ fontSize: 18, color: "#C5A059", margin: 0 }}>Showcase only</p>
+                                                <p style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.15em", color: "#94a3b8", margin: "2px 0 0" }}>Not bookable</p>
                                             </div>
                                         </div>
                                         {/* Fixed amenities row */}
@@ -965,11 +968,37 @@ function Booking() {
                                     color: "#6b7280",
                                     lineHeight: 1.7,
                                     fontSize: 14,
-                                    marginBottom: 24,
+                                    marginBottom: 16,
                                 }}
                             >
                                 {selectedRoom.desc}
                             </p>
+
+                            <div
+                                style={{
+                                    display: "grid",
+                                    gridTemplateColumns: "1fr 1fr",
+                                    gap: 12,
+                                    marginBottom: 24,
+                                }}
+                            >
+                                <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }}>
+                                    <p style={{ margin: "0 0 4px", color: "#64748b", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                                        Price / night
+                                    </p>
+                                    <strong style={{ color: "#002366", fontSize: 15 }}>
+                                        {Number(selectedRoom.price).toLocaleString("vi-VN")} VNĐ
+                                    </strong>
+                                </div>
+                                <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }}>
+                                    <p style={{ margin: "0 0 4px", color: "#64748b", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                                        Max guests
+                                    </p>
+                                    <strong style={{ color: "#002366", fontSize: 15 }}>
+                                        {selectedRoom.capacity} guests
+                                    </strong>
+                                </div>
+                            </div>
 
                             <div style={{ marginBottom: 18 }}>
                                 <label style={bookingLabelStyle}>Check-in</label>
@@ -1004,7 +1033,7 @@ function Booking() {
                             </div>
 
                             <div style={{ marginBottom: 18 }}>
-                                <label style={bookingLabelStyle}>Guests</label>
+                                <label style={bookingLabelStyle}>Guests (max {selectedRoom.capacity})</label>
                                 <input
                                     type="number"
                                     min="1"

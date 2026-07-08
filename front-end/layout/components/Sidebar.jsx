@@ -5,16 +5,16 @@ import { useAuth } from "../../context/AuthContext";
 export default function Sidebar({ compact = false }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
   const navItems = [
-    { path: "/dashboard", label: "Dashboard", icon: "Dashboard" },
+    { path: "/dashboard", label: "Dashboard", icon: "Dashboard", adminOnly: true },
     { path: "/booking", label: "Bookings", icon: "Booking" },
-    { path: "/rooms", label: "Rooms", icon: "Rooms" },
-    { path: "/users", label: "Users", icon: "Users" },
-    { path: "/orders", label: "Orders", icon: "Orders" },
+    { path: "/rooms", label: "Rooms", icon: "Rooms", adminOnly: true },
+    { path: "/users", label: "Users", icon: "Users", adminOnly: true },
+    { path: "/orders", label: "Orders", icon: "Orders", adminOnly: true },
     { path: "/settings", label: "Settings", icon: "Settings" },
-  ];
+  ].filter((item) => !item.adminOnly || user?.role === "admin");
 
   return (
     <aside

@@ -842,6 +842,9 @@ export default function Users() {
 
               <div style={{ display: "flex", gap: 10 }}>
                 <button
+                  type="button"
+                  disabled
+                  title="Advanced filters are not available yet"
                   style={{
                     padding: "9px 18px",
                     background: "rgba(255,255,255,0.06)",
@@ -853,7 +856,8 @@ export default function Users() {
                     fontSize: 13,
                     fontWeight: 500,
                     color: "#cbd5e1",
-                    cursor: "pointer",
+                    cursor: "not-allowed",
+                    opacity: 0.55,
                   }}
                 >
                   <span className="material-icons-round" style={{ fontSize: 16 }}>
@@ -863,6 +867,9 @@ export default function Users() {
                 </button>
 
                 <button
+                  type="button"
+                  disabled
+                  title="Export is not available yet"
                   style={{
                     padding: "9px 18px",
                     background: "rgba(255,255,255,0.06)",
@@ -874,7 +881,8 @@ export default function Users() {
                     fontSize: 13,
                     fontWeight: 500,
                     color: "#cbd5e1",
-                    cursor: "pointer",
+                    cursor: "not-allowed",
+                    opacity: 0.55,
                   }}
                 >
                   <span className="material-icons-round" style={{ fontSize: 16 }}>
@@ -883,6 +891,9 @@ export default function Users() {
                   Export
                 </button>
               </div>
+              <p style={{ width: "100%", margin: "2px 0 0", color: "#64748b", fontSize: 12 }}>
+                Advanced filter and export are not available yet.
+              </p>
             </div>
 
             <div style={{ overflowX: "auto" }}>

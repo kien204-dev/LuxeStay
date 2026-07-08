@@ -13,6 +13,9 @@ const SECRET = process.env.JWT_SECRET;
 const RESET_RESPONSE_MESSAGE =
   "If this email exists, a password reset link has been sent.";
 
+const PUBLIC_USER_FIELDS =
+  "id,name,email,role,phone,bio,avatar_url,created_at,updated_at";
+
 if (!SECRET) {
   throw new Error("JWT_SECRET chưa được cấu hình trong file .env");
 }
@@ -38,7 +41,7 @@ router.post("/login", async (req, res) => {
     }
 
     const result = await pool.query(
-      `SELECT id,name,email,password,role
+      `SELECT ${PUBLIC_USER_FIELDS},password
        FROM users
        WHERE email=$1`,
       [email]
@@ -124,7 +127,7 @@ router.post("/register", async (req, res) => {
     const result = await pool.query(
       `INSERT INTO users(name,email,password,role)
        VALUES($1,$2,$3,'user')
-       RETURNING id,name,email,role`,
+       RETURNING ${PUBLIC_USER_FIELDS}`,
       [
         name,
         email,
@@ -296,7 +299,9 @@ router.post("/google-login", async (req, res) => {
     }
 
     let result = await pool.query(
-      "SELECT * FROM users WHERE email=$1",
+      `SELECT ${PUBLIC_USER_FIELDS}
+       FROM users
+       WHERE email=$1`,
       [email]
     );
 
@@ -311,7 +316,7 @@ router.post("/google-login", async (req, res) => {
       result = await pool.query(
         `INSERT INTO users(name,email,password,role)
          VALUES($1,$2,$3,'user')
-         RETURNING id,name,email,role`,
+         RETURNING ${PUBLIC_USER_FIELDS}`,
         [
           name,
           email,

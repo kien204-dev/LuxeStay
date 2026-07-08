@@ -94,6 +94,8 @@ const BOOKING_SELECT = `
     u.email AS user_email,
     r.room_name,
     r.room_type,
+    r.capacity AS room_capacity,
+    r.price AS room_price,
     r.image AS room_image
   FROM bookings b
   JOIN users u ON b.user_id = u.id

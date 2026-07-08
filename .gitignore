@@ -11,6 +11,15 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+front-end/.env
+front-end/.env.*
+!front-end/.env.example
 backend/uploads/
 
 # Editor directories and files
@@ -23,4 +32,4 @@ backend/uploads/
 *.njsproj
 *.sln
 *.sw?
-desktop.inigit status
+desktop.ini

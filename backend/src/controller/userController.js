@@ -36,13 +36,17 @@ function isForeignKeyError(err) {
   return err?.code === "23503";
 }
 
+function publicUserSelect() {
+  return "id, name, email, role, phone, bio, avatar_url, created_at, updated_at";
+}
+
 // ======================
 // GET ALL USERS
 // ======================
 exports.getUsers = async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, name, email, role, created_at
+      `SELECT ${publicUserSelect()}
        FROM users
        ORDER BY id ASC`
     );
@@ -70,7 +74,7 @@ exports.getUserById = async (req, res) => {
     }
 
     const result = await pool.query(
-      `SELECT id, name, email, role
+      `SELECT ${publicUserSelect()}
        FROM users
        WHERE id = $1`,
       [id]
@@ -148,14 +152,15 @@ exports.createUser = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const result = await pool.query(
-      `INSERT INTO users(name,email,password,role)
-       VALUES($1,$2,$3,$4)
-       RETURNING id,name,email,role`,
+      `INSERT INTO users(name,email,password,role,phone)
+       VALUES($1,$2,$3,$4,$5)
+       RETURNING ${publicUserSelect()}`,
       [
         name,
         email,
         hashedPassword,
-        role
+        role,
+        phone || null
       ]
     );
 
@@ -247,9 +252,11 @@ exports.updateUser = async (req, res) => {
       name=$1,
       email=$2,
       role=$3,
-      password=$4
-      WHERE id=$5
-      RETURNING id,name,email,role
+      password=$4,
+      phone=$5,
+      updated_at=CURRENT_TIMESTAMP
+      WHERE id=$6
+      RETURNING ${publicUserSelect()}
       `;
 
       values = [
@@ -257,6 +264,7 @@ exports.updateUser = async (req, res) => {
         email,
         role,
         hashedPassword,
+        phone || null,
         id
       ];
 
@@ -267,15 +275,18 @@ exports.updateUser = async (req, res) => {
       SET
       name=$1,
       email=$2,
-      role=$3
-      WHERE id=$4
-      RETURNING id,name,email,role
+      role=$3,
+      phone=$4,
+      updated_at=CURRENT_TIMESTAMP
+      WHERE id=$5
+      RETURNING ${publicUserSelect()}
       `;
 
       values = [
         name,
         email,
         role,
+        phone || null,
         id
       ];
 
@@ -353,4 +364,168 @@ exports.deleteUser = async (req, res) => {
 
   }
 
+};
+
+// ======================
+// GET CURRENT USER PROFILE
+// ======================
+exports.getCurrentUser = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT ${publicUserSelect()}
+       FROM users
+       WHERE id = $1`,
+      [req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
+// ======================
+// UPDATE CURRENT USER PROFILE
+// ======================
+exports.updateCurrentUser = async (req, res) => {
+  try {
+    const id = req.user.id;
+    const name = normalizeString(req.body.name);
+    const email = normalizeString(req.body.email).toLowerCase();
+    const phone = normalizeString(req.body.phone);
+    const bio = normalizeString(req.body.bio);
+    const avatarUrl = normalizeString(req.body.avatar_url);
+
+    if (!name || !email) {
+      return res.status(400).json({
+        message: "Name and email are required",
+      });
+    }
+
+    if (!validateEmail(email)) {
+      return res.status(400).json({
+        message: "Email is invalid",
+      });
+    }
+
+    if (!validatePhone(phone)) {
+      return res.status(400).json({
+        message: "Phone is invalid",
+      });
+    }
+
+    const duplicateEmail = await pool.query(
+      "SELECT id FROM users WHERE email = $1 AND id != $2",
+      [email, id]
+    );
+
+    if (duplicateEmail.rows.length > 0) {
+      return res.status(400).json({
+        message: "Email already exists",
+      });
+    }
+
+    const result = await pool.query(
+      `UPDATE users
+       SET
+         name=$1,
+         email=$2,
+         phone=$3,
+         bio=$4,
+         avatar_url=$5,
+         updated_at=CURRENT_TIMESTAMP
+       WHERE id=$6
+       RETURNING ${publicUserSelect()}`,
+      [
+        name,
+        email,
+        phone || null,
+        bio || null,
+        avatarUrl || null,
+        id,
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    res.json({
+      message: "Profile updated successfully",
+      user: result.rows[0],
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
+// ======================
+// CHANGE CURRENT USER PASSWORD
+// ======================
+exports.changeCurrentUserPassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        message: "Current password and new password are required",
+      });
+    }
+
+    if (!validatePassword(newPassword)) {
+      return res.status(400).json({
+        message: "New password must be at least 6 characters",
+      });
+    }
+
+    const result = await pool.query(
+      "SELECT id, password FROM users WHERE id = $1",
+      [req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    const user = result.rows[0];
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+
+    if (!isMatch) {
+      return res.status(400).json({
+        message: "Current password is incorrect",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await pool.query(
+      "UPDATE users SET password=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2",
+      [hashedPassword, req.user.id]
+    );
+
+    res.json({
+      message: "Password changed successfully",
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
 };

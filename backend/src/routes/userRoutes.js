@@ -4,8 +4,11 @@ const router = express.Router();
 const {
   getUsers,
   getUserById,
+  getCurrentUser,
   createUser,
   updateUser,
+  updateCurrentUser,
+  changeCurrentUserPassword,
   deleteUser,
 } = require("../controller/userController.js");
 
@@ -16,6 +19,9 @@ const {
 
 // Chỉ admin mới được xem danh sách user
 router.get("/users", verifyToken, checkRole("admin"), getUsers);
+router.get("/users/me", verifyToken, getCurrentUser);
+router.put("/users/me", verifyToken, updateCurrentUser);
+router.put("/users/me/password", verifyToken, changeCurrentUserPassword);
 
 // Chỉ admin mới được xem chi tiết user
 router.get("/users/:id", verifyToken, checkRole("admin"), getUserById);

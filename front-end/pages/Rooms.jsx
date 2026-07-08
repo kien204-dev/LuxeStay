@@ -205,15 +205,23 @@ export default function Rooms() {
       return;
     }
 
-    if (form.price === "" || Number(form.price) < 0) {
+    const parsedPrice = Number(form.price);
+    const parsedCapacity = Number(form.capacity);
+
+    if (form.price === "" || !Number.isFinite(parsedPrice) || parsedPrice < 0) {
       setFormError("Giá phòng không hợp lệ");
+      return;
+    }
+
+    if (!Number.isInteger(parsedCapacity) || parsedCapacity <= 0) {
+      setFormError("Sức chứa phải là số nguyên lớn hơn 0");
       return;
     }
 
     const payload = {
       ...form,
-      price: Number(form.price),
-      capacity: Number(form.capacity) || 2,
+      price: parsedPrice,
+      capacity: parsedCapacity,
     };
 
     try {

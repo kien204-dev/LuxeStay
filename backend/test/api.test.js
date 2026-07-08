@@ -19,7 +19,11 @@ function makeState() {
         email: "admin@example.com",
         password: bcrypt.hashSync("admin123", 10),
         role: "admin",
+        phone: "0900000001",
+        bio: "System administrator",
+        avatar_url: "https://example.com/admin.png",
         created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
       },
       {
         id: 2,
@@ -27,7 +31,11 @@ function makeState() {
         email: "user@example.com",
         password: bcrypt.hashSync("user123", 10),
         role: "user",
+        phone: null,
+        bio: null,
+        avatar_url: null,
         created_at: "2026-01-02T00:00:00.000Z",
+        updated_at: "2026-01-02T00:00:00.000Z",
       },
     ],
     rooms: [
@@ -98,6 +106,8 @@ function joinBooking(state, booking) {
     user_email: user?.email,
     room_name: room?.room_name,
     room_type: room?.room_type,
+    room_capacity: room?.capacity,
+    room_price: room?.price,
     room_image: room?.image,
   };
 }
@@ -121,7 +131,7 @@ function makeFakePool(state) {
 
     if (text.includes("from users") && text.includes("where email=$1")) {
       const user = state.users.find((item) => item.email === params[0]);
-      return { rows: user ? [user] : [] };
+      return { rows: user ? [text.includes("password") ? user : publicUser(user)] : [] };
     }
 
     if (text.includes("select id from users where email = $1 and id != $2")) {
@@ -145,15 +155,24 @@ function makeFakePool(state) {
       };
     }
 
+    if (text.includes("select id, password from users where id = $1")) {
+      const user = state.users.find((item) => item.id === Number(params[0]));
+      return { rows: user ? [{ id: user.id, password: user.password }] : [] };
+    }
+
     if (text.includes("from users") && text.includes("where id = $1")) {
       const user = state.users.find((item) => item.id === Number(params[0]));
       return { rows: user ? [publicUser(user)] : [] };
     }
 
-    if (text.includes("update users set password=$1 where id=$2")) {
+    if (
+      text.includes("update users set password=$1 where id=$2") ||
+      text.includes("update users set password=$1, updated_at=current_timestamp where id=$2")
+    ) {
       const user = state.users.find((item) => item.id === Number(params[1]));
       if (!user) return { rows: [] };
       user.password = params[0];
+      user.updated_at = new Date().toISOString();
       return { rows: [] };
     }
 
@@ -165,7 +184,11 @@ function makeFakePool(state) {
         email: params[1],
         password: params[2],
         role,
+        phone: params[4] || null,
+        bio: null,
+        avatar_url: null,
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
       state.users.push(user);
       return { rows: [publicUser(user)] };
@@ -173,14 +196,29 @@ function makeFakePool(state) {
 
     if (text.includes("update users")) {
       const hasPassword = text.includes("password=$4");
-      const id = Number(hasPassword ? params[4] : params[3]);
+      const isSelfProfileUpdate = text.includes("avatar_url=$5");
+      const id = Number(
+        isSelfProfileUpdate ? params[5] : hasPassword ? params[5] : params[4]
+      );
       const user = state.users.find((item) => item.id === id);
       if (!user) return { rows: [] };
 
       user.name = params[0];
       user.email = params[1];
-      user.role = params[2];
-      if (hasPassword) user.password = params[3];
+      if (isSelfProfileUpdate) {
+        user.phone = params[2] || null;
+        user.bio = params[3] || null;
+        user.avatar_url = params[4] || null;
+      } else {
+        user.role = params[2];
+        if (hasPassword) {
+          user.password = params[3];
+          user.phone = params[4] || null;
+        } else {
+          user.phone = params[3] || null;
+        }
+      }
+      user.updated_at = new Date().toISOString();
       return { rows: [publicUser(user)] };
     }
 
@@ -583,6 +621,7 @@ describe("hotel booking API", () => {
 
     assert.equal(ok.response.status, 200);
     assert.equal(ok.body.user.role, "admin");
+    assert.equal(ok.body.user.password, undefined);
     assert.ok(ok.body.token);
 
     const bad = await request(baseUrl, "/api/login", {
@@ -689,6 +728,30 @@ describe("hotel booking API", () => {
     });
     assert.equal(created.response.status, 201);
     assert.equal(created.body.room.room_name, "Garden Room");
+
+    const invalidPrice = await request(baseUrl, "/api/rooms", {
+      method: "POST",
+      headers: authHeader(adminToken),
+      body: JSON.stringify({
+        room_name: "Bad Price Room",
+        room_type: "Standard",
+        price: -1,
+        capacity: 2,
+      }),
+    });
+    assert.equal(invalidPrice.response.status, 400);
+
+    const invalidCapacity = await request(baseUrl, "/api/rooms", {
+      method: "POST",
+      headers: authHeader(adminToken),
+      body: JSON.stringify({
+        room_name: "Bad Capacity Room",
+        room_type: "Standard",
+        price: 80,
+        capacity: 0,
+      }),
+    });
+    assert.equal(invalidCapacity.response.status, 400);
   });
 
   it("allows admin user management and rejects normal users", async () => {
@@ -714,6 +777,88 @@ describe("hotel booking API", () => {
       }),
     });
     assert.equal(invalid.response.status, 400);
+  });
+
+  it("lets authenticated users manage their own profile and password", async () => {
+    const profile = await request(baseUrl, "/api/users/me", {
+      headers: authHeader(userToken),
+    });
+
+    assert.equal(profile.response.status, 200);
+    assert.equal(profile.body.email, "user@example.com");
+    assert.equal(profile.body.password, undefined);
+
+    const duplicateEmail = await request(baseUrl, "/api/users/me", {
+      method: "PUT",
+      headers: authHeader(userToken),
+      body: JSON.stringify({
+        name: "Normal User",
+        email: "admin@example.com",
+      }),
+    });
+
+    assert.equal(duplicateEmail.response.status, 400);
+
+    const updated = await request(baseUrl, "/api/users/me", {
+      method: "PUT",
+      headers: authHeader(userToken),
+      body: JSON.stringify({
+        name: "Profile User",
+        email: "profile@example.com",
+        role: "admin",
+        phone: "0912345678",
+        bio: "Booking guest",
+        avatar_url: "https://example.com/avatar.png",
+      }),
+    });
+
+    assert.equal(updated.response.status, 200);
+    assert.equal(updated.body.user.name, "Profile User");
+    assert.equal(updated.body.user.email, "profile@example.com");
+    assert.equal(updated.body.user.role, "user");
+    assert.equal(updated.body.user.phone, "0912345678");
+    assert.equal(updated.body.user.password, undefined);
+
+    const wrongPassword = await request(baseUrl, "/api/users/me/password", {
+      method: "PUT",
+      headers: authHeader(userToken),
+      body: JSON.stringify({
+        currentPassword: "wrong-password",
+        newPassword: "profilepass123",
+      }),
+    });
+
+    assert.equal(wrongPassword.response.status, 400);
+
+    const changedPassword = await request(baseUrl, "/api/users/me/password", {
+      method: "PUT",
+      headers: authHeader(userToken),
+      body: JSON.stringify({
+        currentPassword: "newpass123",
+        newPassword: "profilepass123",
+      }),
+    });
+
+    assert.equal(changedPassword.response.status, 200);
+
+    const oldLogin = await request(baseUrl, "/api/login", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "profile@example.com",
+        password: "newpass123",
+      }),
+    });
+    assert.equal(oldLogin.response.status, 401);
+
+    const newLogin = await request(baseUrl, "/api/login", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "profile@example.com",
+        password: "profilepass123",
+      }),
+    });
+    assert.equal(newLogin.response.status, 200);
+    assert.equal(newLogin.body.user.password, undefined);
   });
 
   it("returns dashboard stats for admin only", async () => {
@@ -761,6 +906,8 @@ describe("hotel booking API", () => {
       headers: authHeader(userToken),
     });
     assert.equal(userBookings.response.status, 200);
+    assert.equal(userBookings.body[0].room_capacity, 4);
+    assert.equal(userBookings.body[0].room_price, 200);
     assert.deepEqual(
       userBookings.body.map((item) => item.user_id),
       [2]

@@ -318,6 +318,7 @@ export default function MyBookings() {
                     </h3>
                     <p style={{ margin: "0 0 8px", color: "#64748b", fontSize: 13 }}>
                       {b.room_type}
+                      {b.room_capacity ? ` · Tối đa ${b.room_capacity} khách` : ""}
                     </p>
                     <p style={{ margin: 0, color: "#475569", fontSize: 14 }}>
                       {formatDate(b.check_in)} → {formatDate(b.check_out)}
@@ -337,6 +338,9 @@ export default function MyBookings() {
                     <strong style={{ color: "#C5A059", fontSize: 18 }}>
                       {formatMoney(b.total_price)}
                     </strong>
+                    <span style={{ color: "#94a3b8", fontSize: 11, textAlign: "right" }}>
+                      Tổng đã chốt
+                    </span>
                     <button
                       onClick={() => setSelectedBooking(b)}
                       style={{
@@ -491,6 +495,7 @@ function BookingDetailModal({ booking, onClose }) {
                 </h3>
                 <p style={{ margin: 0, color: "#64748b", fontSize: 14 }}>
                   {booking.room_type || "-"}
+                  {booking.room_capacity ? ` · Tối đa ${booking.room_capacity} khách` : ""}
                 </p>
               </div>
               <span
@@ -520,8 +525,14 @@ function BookingDetailModal({ booking, onClose }) {
               <DetailItem label="Check-in" value={formatDate(booking.check_in)} />
               <DetailItem label="Check-out" value={formatDate(booking.check_out)} />
               <DetailItem label="Số đêm" value={`${nights} đêm`} />
+              {booking.room_capacity && (
+                <DetailItem label="Sức chứa phòng" value={`${booking.room_capacity} khách`} />
+              )}
+              {booking.room_price !== undefined && booking.room_price !== null && (
+                <DetailItem label="Giá phòng hiện tại" value={`${formatMoney(booking.room_price)} / đêm`} />
+              )}
               <DetailItem label="Ngày tạo" value={formatDate(booking.created_at)} />
-              <DetailItem label="Tổng tiền" value={formatMoney(booking.total_price)} highlight />
+              <DetailItem label="Tổng tiền đã chốt" value={formatMoney(booking.total_price)} highlight />
               <DetailItem label="Trạng thái" value={STATUS_LABEL[booking.status] || booking.status || "-"} />
             </div>
 

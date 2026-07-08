@@ -17,6 +17,11 @@ function parseNonNegativeNumber(value) {
   return Number.isFinite(numberValue) && numberValue >= 0 ? numberValue : null;
 }
 
+function parseRoomPrice(value) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) && numberValue >= 0 ? numberValue : null;
+}
+
 function hasRoomQuery(query) {
   return Object.keys(query).length > 0;
 }
@@ -174,6 +179,21 @@ exports.createRoom = async (req, res) => {
       });
     }
 
+    const parsedPrice = parseRoomPrice(price);
+    const parsedCapacity = parsePositiveInteger(capacity, null);
+
+    if (parsedPrice === null) {
+      return res.status(400).json({
+        message: "Price must be a valid number greater than or equal to 0",
+      });
+    }
+
+    if (parsedCapacity === null) {
+      return res.status(400).json({
+        message: "Capacity must be a positive integer",
+      });
+    }
+
     const result = await pool.query(
       `INSERT INTO rooms(room_name, room_type, price, description, capacity, image, status)
        VALUES($1,$2,$3,$4,$5,$6,$7)
@@ -181,9 +201,9 @@ exports.createRoom = async (req, res) => {
       [
         room_name,
         room_type,
-        price,
+        parsedPrice,
         description || null,
-        capacity || 2,
+        parsedCapacity,
         image || null,
         status || "available",
       ]
@@ -218,6 +238,27 @@ exports.updateRoom = async (req, res) => {
       status,
     } = req.body;
 
+    if (!room_name || !room_type) {
+      return res.status(400).json({
+        message: "room_name and room_type are required",
+      });
+    }
+
+    const parsedPrice = parseRoomPrice(price);
+    const parsedCapacity = parsePositiveInteger(capacity, null);
+
+    if (parsedPrice === null) {
+      return res.status(400).json({
+        message: "Price must be a valid number greater than or equal to 0",
+      });
+    }
+
+    if (parsedCapacity === null) {
+      return res.status(400).json({
+        message: "Capacity must be a positive integer",
+      });
+    }
+
     const result = await pool.query(
       `UPDATE rooms
        SET
@@ -233,9 +274,9 @@ exports.updateRoom = async (req, res) => {
       [
         room_name,
         room_type,
-        price,
+        parsedPrice,
         description || null,
-        capacity || 2,
+        parsedCapacity,
         image || null,
         status || "available",
         id,

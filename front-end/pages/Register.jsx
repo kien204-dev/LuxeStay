@@ -80,10 +80,6 @@ const handleChange = (e) => {
         }
     };
 
-    const handleAppleLogin = () => {
-        alert("Apple login chưa hỗ trợ");
-    };
-
     const handleRegister = async (e) => {
         e.preventDefault();
 
@@ -214,14 +210,17 @@ const handleChange = (e) => {
                             </svg>
                             <span>Google</span>
                         </button>
-                        <button type="button" onClick={handleAppleLogin}
-                            className="flex items-center justify-center gap-3 py-3 rounded-xl bg-[#1f2b49] transition-all duration-300 shadow-[0_0_10px_rgba(255,255,255,0.2)] hover:shadow-[0_0_25px_rgba(255,255,255,0.6)] hover:scale-105 active:scale-95">
+                        <button type="button" disabled title="Apple login is not configured yet"
+                            className="flex items-center justify-center gap-3 py-3 rounded-xl bg-[#1f2b49] opacity-50 cursor-not-allowed">
                             <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
                                 <path d="M16.365 1.43c0 1.14-.42 2.22-1.13 3.02-.73.82-1.92 1.45-3.06 1.36-.14-1.1.4-2.28 1.13-3.08.74-.82 2.02-1.4 3.06-1.3zM20.7 17.34c-.83 1.22-1.69 2.44-3.04 2.47-1.32.03-1.75-.78-3.26-.78-1.5 0-1.99.75-3.23.81-1.3.05-2.3-1.3-3.13-2.52-1.7-2.48-3-7-1.26-10.06.86-1.52 2.4-2.48 4.08-2.51 1.27-.03 2.46.86 3.23.86.76 0 2.2-1.06 3.7-.9.63.03 2.4.26 3.54 1.93-3.1 1.7-2.6 6.2.37 7.7z" />
                             </svg>
                             <span>Apple</span>
                         </button>
                     </div>
+                    <p className="mt-3 text-center text-xs text-gray-500">
+                        Apple login is not configured yet.
+                    </p>
 
                     <p className="mt-6 text-center text-gray-400 text-sm">
                         Already have an account?{" "}

@@ -17,6 +17,30 @@ export const getUserById = async (id) => {
 };
 
 // =========================
+// GET CURRENT USER PROFILE
+// =========================
+export const getCurrentUser = async () => {
+  const response = await api.get("/users/me");
+  return response.data;
+};
+
+// =========================
+// UPDATE CURRENT USER PROFILE
+// =========================
+export const updateCurrentUserProfile = async (profileData) => {
+  const response = await api.put("/users/me", profileData);
+  return response.data;
+};
+
+// =========================
+// CHANGE CURRENT USER PASSWORD
+// =========================
+export const changeCurrentUserPassword = async (passwordData) => {
+  const response = await api.put("/users/me/password", passwordData);
+  return response.data;
+};
+
+// =========================
 // CREATE USER
 // =========================
 export const createUser = async (userData) => {
