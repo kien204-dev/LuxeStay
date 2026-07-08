@@ -81,7 +81,7 @@ function normalizeSql(sql) {
 }
 
 function publicUser(user) {
-  const { password, ...safeUser } = user;
+  const { password: _password, ...safeUser } = user;
   return safeUser;
 }
 

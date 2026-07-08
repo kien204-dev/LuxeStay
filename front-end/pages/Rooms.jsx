@@ -1,5 +1,6 @@
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   getRooms,
   createRoom,
@@ -31,10 +32,16 @@ function formatMoney(value) {
 }
 
 export default function Rooms() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 1,
+  });
 
   const [showModal, setShowModal] = useState(false);
   const [editingRoom, setEditingRoom] = useState(null);
@@ -43,12 +50,74 @@ export default function Rooms() {
   const [formError, setFormError] = useState("");
   const [deletingId, setDeletingId] = useState(null);
 
-  const loadRooms = async () => {
+  const queryParams = useMemo(() => {
+    const params = {};
+
+    [
+      "q",
+      "status",
+      "minPrice",
+      "maxPrice",
+      "minCapacity",
+      "maxCapacity",
+      "sortBy",
+      "sortOrder",
+      "page",
+      "limit",
+    ].forEach((key) => {
+      const value = searchParams.get(key);
+      if (value) params[key] = value;
+    });
+
+    params.page = params.page || "1";
+    params.limit = params.limit || "10";
+    params.sortBy = params.sortBy || "created_at";
+    params.sortOrder = params.sortOrder || "desc";
+
+    return params;
+  }, [searchParams]);
+
+  const updateQuery = (updates, resetPage = true) => {
+    const next = new URLSearchParams(searchParams);
+
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === "" || value === null || value === undefined) {
+        next.delete(key);
+      } else {
+        next.set(key, value);
+      }
+    });
+
+    if (resetPage) next.set("page", "1");
+
+    setSearchParams(next);
+  };
+
+  const loadRooms = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
-      const data = await getRooms();
-      setRooms(data);
+      const result = await getRooms(queryParams);
+
+      if (Array.isArray(result)) {
+        setRooms(result);
+        setPagination({
+          page: 1,
+          limit: result.length || 10,
+          total: result.length,
+          totalPages: 1,
+        });
+      } else {
+        setRooms(result.data || []);
+        setPagination(
+          result.pagination || {
+            page: 1,
+            limit: 10,
+            total: 0,
+            totalPages: 1,
+          }
+        );
+      }
     } catch (err) {
       setError(
         err.response?.data?.message || "Không tải được danh sách phòng"
@@ -56,21 +125,11 @@ export default function Rooms() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [queryParams]);
 
   useEffect(() => {
     loadRooms();
-  }, []);
-
-  const filteredRooms = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return rooms;
-    return rooms.filter(
-      (r) =>
-        r.room_name?.toLowerCase().includes(q) ||
-        r.room_type?.toLowerCase().includes(q)
-    );
-  }, [rooms, search]);
+  }, [loadRooms]);
 
   const openCreateModal = () => {
     setEditingRoom(null);
@@ -128,16 +187,13 @@ export default function Rooms() {
       setSaving(true);
 
       if (editingRoom) {
-        const res = await updateRoom(editingRoom.id, payload);
-        setRooms((list) =>
-          list.map((r) => (r.id === editingRoom.id ? res.room : r))
-        );
+        await updateRoom(editingRoom.id, payload);
       } else {
-        const res = await createRoom(payload);
-        setRooms((list) => [...list, res.room]);
+        await createRoom(payload);
       }
 
       setShowModal(false);
+      await loadRooms();
     } catch (err) {
       setFormError(
         err.response?.data?.message || "Lưu phòng thất bại, vui lòng thử lại"
@@ -157,7 +213,7 @@ export default function Rooms() {
     setError("");
     try {
       await deleteRoom(room.id);
-      setRooms((list) => list.filter((r) => r.id !== room.id));
+      await loadRooms();
     } catch (err) {
       setError(err.response?.data?.message || "Xoa phong that bai");
       alert(err.response?.data?.message || "Xóa phòng thất bại");
@@ -187,12 +243,12 @@ export default function Rooms() {
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", width: "min(100%, 520px)" }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", width: "min(100%, 900px)" }}>
           <input
             type="text"
             placeholder="Tìm theo tên hoặc loại phòng..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={queryParams.q || ""}
+            onChange={(e) => updateQuery({ q: e.target.value })}
             style={{
               background: "#192540",
               border: "1px solid rgba(64,72,93,0.4)",
@@ -204,6 +260,85 @@ export default function Rooms() {
               flex: "1 1 220px",
             }}
           />
+
+          <select
+            value={queryParams.status || ""}
+            onChange={(e) => updateQuery({ status: e.target.value })}
+            style={{ ...filterInputStyle, flex: "1 1 150px" }}
+          >
+            <option value="">Tất cả trạng thái</option>
+            {STATUS_OPTIONS.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+
+          <input
+            type="number"
+            min="0"
+            placeholder="Giá từ"
+            value={queryParams.minPrice || ""}
+            onChange={(e) => updateQuery({ minPrice: e.target.value })}
+            style={{ ...filterInputStyle, flex: "1 1 110px" }}
+          />
+
+          <input
+            type="number"
+            min="0"
+            placeholder="Giá đến"
+            value={queryParams.maxPrice || ""}
+            onChange={(e) => updateQuery({ maxPrice: e.target.value })}
+            style={{ ...filterInputStyle, flex: "1 1 110px" }}
+          />
+
+          <input
+            type="number"
+            min="1"
+            placeholder="Khách từ"
+            value={queryParams.minCapacity || ""}
+            onChange={(e) => updateQuery({ minCapacity: e.target.value })}
+            style={{ ...filterInputStyle, flex: "1 1 110px" }}
+          />
+
+          <input
+            type="number"
+            min="1"
+            placeholder="Khách đến"
+            value={queryParams.maxCapacity || ""}
+            onChange={(e) => updateQuery({ maxCapacity: e.target.value })}
+            style={{ ...filterInputStyle, flex: "1 1 110px" }}
+          />
+
+          <select
+            value={queryParams.sortBy || "created_at"}
+            onChange={(e) => updateQuery({ sortBy: e.target.value })}
+            style={{ ...filterInputStyle, flex: "1 1 130px" }}
+          >
+            <option value="created_at">Mới nhất</option>
+            <option value="name">Tên phòng</option>
+            <option value="price">Giá</option>
+          </select>
+
+          <select
+            value={queryParams.sortOrder || "desc"}
+            onChange={(e) => updateQuery({ sortOrder: e.target.value })}
+            style={{ ...filterInputStyle, flex: "1 1 120px" }}
+          >
+            <option value="desc">Giảm dần</option>
+            <option value="asc">Tăng dần</option>
+          </select>
+
+          <select
+            value={queryParams.limit || "10"}
+            onChange={(e) => updateQuery({ limit: e.target.value })}
+            style={{ ...filterInputStyle, flex: "1 1 90px" }}
+          >
+            <option value="5">5 / trang</option>
+            <option value="10">10 / trang</option>
+            <option value="20">20 / trang</option>
+            <option value="50">50 / trang</option>
+          </select>
 
           <button
             onClick={openCreateModal}
@@ -242,7 +377,7 @@ export default function Rooms() {
           <div style={{ padding: "40px 22px", textAlign: "center", color: "#7b849e" }}>
             Đang tải danh sách phòng...
           </div>
-        ) : filteredRooms.length === 0 ? (
+        ) : rooms.length === 0 ? (
           <div style={{ padding: "40px 22px", textAlign: "center", color: "#7b849e" }}>
             Không có phòng nào.
           </div>
@@ -279,7 +414,7 @@ export default function Rooms() {
               </thead>
 
               <tbody>
-                {filteredRooms.map((room) => {
+                {rooms.map((room) => {
                   const style = statusStyle[room.status] || statusStyle.available;
                   return (
                     <tr key={room.id}>
@@ -373,6 +508,75 @@ export default function Rooms() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {!loading && pagination.total > 0 && (
+          <div
+            style={{
+              padding: "14px 18px",
+              borderTop: "1px solid rgba(64,72,93,0.3)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+              flexWrap: "wrap",
+              color: "#a3aac4",
+              fontSize: 13,
+            }}
+          >
+            <span>
+              Trang {pagination.page} / {pagination.totalPages} - {pagination.total} phòng
+            </span>
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <button
+                disabled={pagination.page <= 1}
+                onClick={() => updateQuery({ page: String(pagination.page - 1) }, false)}
+                style={paginationButtonStyle}
+              >
+                Trước
+              </button>
+
+              {Array.from({ length: pagination.totalPages }, (_, index) => index + 1)
+                .filter(
+                  (pageNumber) =>
+                    pageNumber === 1 ||
+                    pageNumber === pagination.totalPages ||
+                    Math.abs(pageNumber - pagination.page) <= 1
+                )
+                .map((pageNumber, index, pages) => {
+                  const previous = pages[index - 1];
+                  const showGap = previous && pageNumber - previous > 1;
+
+                  return (
+                    <span key={pageNumber} style={{ display: "inline-flex", gap: 8 }}>
+                      {showGap && <span style={{ padding: "7px 2px" }}>...</span>}
+                      <button
+                        onClick={() => updateQuery({ page: String(pageNumber) }, false)}
+                        style={{
+                          ...paginationButtonStyle,
+                          background:
+                            pageNumber === pagination.page
+                              ? "#9fa7ff"
+                              : "rgba(159,167,255,0.12)",
+                          color: pageNumber === pagination.page ? "#060e20" : "#9fa7ff",
+                        }}
+                      >
+                        {pageNumber}
+                      </button>
+                    </span>
+                  );
+                })}
+
+              <button
+                disabled={pagination.page >= pagination.totalPages}
+                onClick={() => updateQuery({ page: String(pagination.page + 1) }, false)}
+                style={paginationButtonStyle}
+              >
+                Sau
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -569,4 +773,25 @@ const inputStyle = {
   fontSize: 14,
   outline: "none",
   boxSizing: "border-box",
+};
+
+const filterInputStyle = {
+  background: "#192540",
+  border: "1px solid rgba(64,72,93,0.4)",
+  borderRadius: 10,
+  padding: "10px 12px",
+  color: "#dee5ff",
+  fontSize: 14,
+  minWidth: 0,
+  boxSizing: "border-box",
+};
+
+const paginationButtonStyle = {
+  padding: "7px 12px",
+  borderRadius: 8,
+  border: "1px solid rgba(159,167,255,0.3)",
+  background: "rgba(159,167,255,0.12)",
+  color: "#9fa7ff",
+  cursor: "pointer",
+  fontWeight: 700,
 };

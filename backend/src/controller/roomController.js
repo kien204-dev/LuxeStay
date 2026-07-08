@@ -1,10 +1,114 @@
 const pool = require("../db/db.js");
 
+const ROOM_SORT_COLUMNS = {
+  name: "room_name",
+  price: "price",
+  created_at: "created_at",
+};
+
+function parsePositiveInteger(value, fallback) {
+  const numberValue = Number(value);
+  return Number.isInteger(numberValue) && numberValue > 0 ? numberValue : fallback;
+}
+
+function parseNonNegativeNumber(value) {
+  if (value === undefined || value === "") return null;
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) && numberValue >= 0 ? numberValue : null;
+}
+
+function hasRoomQuery(query) {
+  return Object.keys(query).length > 0;
+}
+
 // ======================
 // GET ALL ROOMS
 // ======================
 exports.getRooms = async (req, res) => {
   try {
+    if (hasRoomQuery(req.query)) {
+      const {
+        q,
+        status,
+        minPrice,
+        maxPrice,
+        minCapacity,
+        maxCapacity,
+        sortBy = "created_at",
+        sortOrder = "desc",
+      } = req.query;
+
+      const page = parsePositiveInteger(req.query.page, 1);
+      const limit = Math.min(parsePositiveInteger(req.query.limit, 10), 100);
+      const offset = (page - 1) * limit;
+      const orderColumn = ROOM_SORT_COLUMNS[sortBy] || ROOM_SORT_COLUMNS.created_at;
+      const orderDirection = String(sortOrder).toLowerCase() === "asc" ? "ASC" : "DESC";
+      const filters = [];
+      const values = [];
+
+      if (q && String(q).trim()) {
+        values.push(`%${String(q).trim()}%`);
+        filters.push(`(room_name ILIKE $${values.length} OR room_type ILIKE $${values.length})`);
+      }
+
+      if (["available", "booked", "maintenance"].includes(status)) {
+        values.push(status);
+        filters.push(`status = $${values.length}`);
+      }
+
+      const parsedMinPrice = parseNonNegativeNumber(minPrice);
+      if (parsedMinPrice !== null) {
+        values.push(parsedMinPrice);
+        filters.push(`price >= $${values.length}`);
+      }
+
+      const parsedMaxPrice = parseNonNegativeNumber(maxPrice);
+      if (parsedMaxPrice !== null) {
+        values.push(parsedMaxPrice);
+        filters.push(`price <= $${values.length}`);
+      }
+
+      const parsedMinCapacity = parsePositiveInteger(minCapacity, null);
+      if (parsedMinCapacity !== null) {
+        values.push(parsedMinCapacity);
+        filters.push(`capacity >= $${values.length}`);
+      }
+
+      const parsedMaxCapacity = parsePositiveInteger(maxCapacity, null);
+      if (parsedMaxCapacity !== null) {
+        values.push(parsedMaxCapacity);
+        filters.push(`capacity <= $${values.length}`);
+      }
+
+      const whereClause = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+      const countResult = await pool.query(
+        `SELECT COUNT(*)::int AS total FROM rooms ${whereClause}`,
+        values
+      );
+      const total = Number(countResult.rows[0]?.total) || 0;
+
+      const dataValues = [...values, limit, offset];
+      const result = await pool.query(
+        `SELECT id, room_name, room_type, price, description, capacity, image, status, created_at
+         FROM rooms
+         ${whereClause}
+         ORDER BY ${orderColumn} ${orderDirection}, id ASC
+         LIMIT $${values.length + 1}
+         OFFSET $${values.length + 2}`,
+        dataValues
+      );
+
+      return res.json({
+        data: result.rows,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / limit)),
+        },
+      });
+    }
+
     const result = await pool.query(
       `SELECT id, room_name, room_type, price, description, capacity, image, status, created_at
        FROM rooms
