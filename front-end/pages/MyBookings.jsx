@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getBookings, cancelBooking } from "../services/bookingService";
+import { normalizeImageUrl, useFallbackImage } from "../utils/imageUrl";
 
 const STATUS_STYLE = {
   confirmed: { color: "#67e8b4", bg: "rgba(103,232,180,0.12)" },
@@ -263,14 +264,23 @@ export default function MyBookings() {
                   <div
                     className="my-booking-image"
                     style={{
-                      backgroundImage: b.room_image
-                        ? `url(${b.room_image})`
-                        : "linear-gradient(135deg,#002366,#004080)",
-                      backgroundSize: "cover",
-                      backgroundPosition: "center",
                       minHeight: 120,
+                      overflow: "hidden",
                     }}
-                  />
+                  >
+                    <img
+                      src={normalizeImageUrl(b.room_image)}
+                      alt={b.room_name || "Room"}
+                      onError={useFallbackImage}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        minHeight: 120,
+                        objectFit: "cover",
+                        display: "block",
+                      }}
+                    />
+                  </div>
                   <div style={{ padding: "20px 24px" }}>
                     <div
                       style={{
@@ -456,13 +466,22 @@ function BookingDetailModal({ booking, onClose }) {
           <div
             style={{
               minHeight: 280,
-              backgroundImage: booking.room_image
-                ? `url(${booking.room_image})`
-                : "linear-gradient(135deg,#002366,#004080)",
-              backgroundSize: "cover",
-              backgroundPosition: "center",
+              overflow: "hidden",
             }}
-          />
+          >
+            <img
+              src={normalizeImageUrl(booking.room_image)}
+              alt={booking.room_name || "Room"}
+              onError={useFallbackImage}
+              style={{
+                width: "100%",
+                height: "100%",
+                minHeight: 280,
+                objectFit: "cover",
+                display: "block",
+              }}
+            />
+          </div>
 
           <div style={{ padding: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 18 }}>

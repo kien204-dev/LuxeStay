@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getRooms } from "../services/roomService";
 import { createBooking } from "../services/bookingService";
+import { normalizeImageUrl, useFallbackImage } from "../utils/imageUrl";
 
 function mapRoomForDisplay(room) {
   return {
@@ -13,9 +14,7 @@ function mapRoomForDisplay(room) {
     desc:
       room.description ||
       `${room.room_type} — tối đa ${room.capacity || 2} khách`,
-    img:
-      room.image ||
-      "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&auto=format&fit=crop&q=80",
+    img: normalizeImageUrl(room.image),
     type: room.room_type,
     icons: ["restaurant", "spa", "pool"],
     status: room.status,
@@ -156,6 +155,11 @@ function Booking() {
     const [bookingError, setBookingError] = useState("");
 
     const openBookingModal = (room) => {
+        if (!room?.id) {
+            alert("This showcase room is for viewing only. Please choose a room from the live room list.");
+            return;
+        }
+
         setSelectedRoom(room);
         setBookingForm({
             checkIn: "",
@@ -430,7 +434,7 @@ function Booking() {
                 {/* Hero */}
                 <section style={{ position: "relative", height: "795px", display: "flex", flexDirection: "column", justifyContent: "flex-end", alignItems: "center", overflow: "hidden" }}>
                     <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
-                        <img alt="Luxury Hotel Lobby" style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        <img alt="Luxury Hotel Lobby" onError={useFallbackImage} style={{ width: "100%", height: "100%", objectFit: "cover" }}
                             src="https://lh3.googleusercontent.com/aida-public/AB6AXuAe1eIrCHeHTRnMBMHnCSsRPwJt2r7uVIHNSbs8Y4L_JSF-yCK1ezkKDT2tQ0KBlDM7zKc5PvQMc1BB4rQIbRwR2gT6ArIp9bdggjM8xyhs5yVepCrRWoCLQzAaqGjFSiIh63y8UHCTixjtjtTE5QZ_1dzRvTQTY0qwqSsrr8OQXCEJlv5S9HOD8H5Gdx_niCODZXMsZBOs3QGZ_ZIIKxNaIlPT9TNPRAzc7EceXWHBKhvbbe0VRgb9Xl_J0PoLqWhMD8UalNr9UXc" />
                         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,17,58,0.4) 0%, rgba(0,17,58,0.1) 50%, rgba(249,249,252,1) 100%)" }} />
                     </div>
@@ -478,7 +482,7 @@ function Booking() {
                                     onMouseEnter={e => e.currentTarget.querySelector("img").style.transform = "scale(1.08)"}
                                     onMouseLeave={e => e.currentTarget.querySelector("img").style.transform = "scale(1)"}>
                                     <div style={{ borderRadius: 12, aspectRatio: "3/4", overflow: "hidden", position: "relative" }}>
-                                        <img src={img} alt={city} style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.7s ease" }} />
+                                        <img src={normalizeImageUrl(img)} alt={city} onError={useFallbackImage} style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.7s ease" }} />
                                         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,35,102,0.6) 0%, transparent 50%)" }} />
                                         <div style={{ position: "absolute", bottom: 24, left: 24 }}>
                                             <h3 className="font-headline" style={{ color: "#fff", fontSize: 28, margin: 0 }}>{city}</h3>
@@ -534,7 +538,7 @@ function Booking() {
                         ) : (
                             <>
                                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 28 }}>
-                                    {vnVisible.map(({ id, name, location, desc, icons, img, price, type }) => (
+                                    {vnVisible.map(({ id, name, location, desc, icons, img, price, type, capacity }) => (
                                         <div key={id} style={{ background: "#fff", borderRadius: 16, overflow: "hidden", boxShadow: "0 4px 24px rgba(0,0,0,0.08)", transition: "transform 0.3s, box-shadow 0.3s" }}
                                             onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.boxShadow = "0 12px 40px rgba(0,0,0,0.14)"; }}
                                             onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 4px 24px rgba(0,0,0,0.08)"; }}>
@@ -547,6 +551,7 @@ function Booking() {
                                                         desc,
                                                         img,
                                                         price,
+                                                        capacity,
                                                         type: type || "Luxury Room",
                                                     })
                                                 }
@@ -567,7 +572,8 @@ function Booking() {
                                                         objectFit: "cover",
                                                         transition: "transform 1s ease"
                                                     }}
-                                                    src={img}
+                                                    src={normalizeImageUrl(img)}
+                                                    onError={useFallbackImage}
                                                 />
                                                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.18) 0%, transparent 50%)" }} />
                                                 <div style={{ position: "absolute", top: 14, right: 14, background: "#C5A059", color: "#000", padding: "4px 12px", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.15em", fontWeight: 700 }}>{Number(price).toLocaleString("vi-VN")} đ/đêm</div>
@@ -595,6 +601,7 @@ function Booking() {
                                                                 desc,
                                                                 img,
                                                                 price,
+                                                                capacity,
                                                                 type: type || "Luxury Room",
                                                             })
                                                         }
@@ -660,7 +667,8 @@ function Booking() {
                                                 objectFit: "cover",
                                                 transition: "transform 0.5s ease",
                                             }}
-                                            src={img}
+                                            src={normalizeImageUrl(img)}
+                                            onError={useFallbackImage}
                                             onMouseEnter={e => e.currentTarget.style.transform = "scale(1.06)"}
                                             onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
                                         />
@@ -759,7 +767,7 @@ function Booking() {
                 {/* CTA */}
                 <section style={{ position: "relative", padding: "128px 0", overflow: "hidden" }}>
                     <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
-                        <img alt="Poolside Luxury" style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        <img alt="Poolside Luxury" onError={useFallbackImage} style={{ width: "100%", height: "100%", objectFit: "cover" }}
                             src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5LXgNktzMjgk6YMo0A545hrJ2H-FzYcOmqRul-Gzz_EMbi37IwO8wC0iuAvwI6_bwROKlsZCObpIF5DOK2g9i42TxFmQ1psUpcMFotaUHR6T-V1qaOelvGnl9jdJB7t4QFjHvAed8J_CIwPa82lV_K4sS4f6klKhO290e3JxQDMaXQJP7R_bKLmn1VKs4AfRkj_04QSLFBAAEvow10SJfR7MPCVHMHWKxAGFEXwcDxJTXecwgXL9y-WoHg9rX4GHY-B3ayjTX3K0" />
                         <div style={{ position: "absolute", inset: 0, background: "rgba(0,35,102,0.45)", backdropFilter: "blur(2px)" }} />
                     </div>
@@ -847,7 +855,7 @@ function Booking() {
                             className="booking-modal-image"
                             style={{
                                 minHeight: 520,
-                                backgroundImage: `url(${selectedRoom.img})`,
+                                backgroundImage: `url(${normalizeImageUrl(selectedRoom.img)})`,
                                 backgroundSize: "cover",
                                 backgroundPosition: "center",
                                 position: "relative",

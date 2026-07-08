@@ -6,9 +6,13 @@ import {
   createRoom,
   updateRoom,
   deleteRoom,
+  uploadRoomImage,
 } from "../services/roomService";
+import { normalizeImageUrl, useFallbackImage } from "../utils/imageUrl";
 
 const STATUS_OPTIONS = ["available", "booked", "maintenance"];
+const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 const statusStyle = {
   available: { color: "#67e8b4", bg: "rgba(103,232,180,0.12)" },
@@ -49,6 +53,7 @@ export default function Rooms() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [deletingId, setDeletingId] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const queryParams = useMemo(() => {
     const params = {};
@@ -161,6 +166,34 @@ export default function Rooms() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleImageFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    setFormError("");
+
+    if (!file) return;
+
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setFormError("Only jpg, png, and webp images are allowed");
+      return;
+    }
+
+    if (file.size > MAX_IMAGE_SIZE) {
+      setFormError("Image size must be 2MB or smaller");
+      return;
+    }
+
+    try {
+      setUploadingImage(true);
+      const result = await uploadRoomImage(file);
+      setForm((prev) => ({ ...prev, image: result.image || "" }));
+    } catch (err) {
+      setFormError(err.response?.data?.message || "Image upload failed");
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -420,27 +453,18 @@ export default function Rooms() {
                     <tr key={room.id}>
                       <td style={tdStyle}>
                         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                          {room.image ? (
-                            <img
-                              src={room.image}
-                              alt={room.room_name}
-                              style={{
-                                width: 48,
-                                height: 48,
-                                borderRadius: 10,
-                                objectFit: "cover",
-                              }}
-                            />
-                          ) : (
-                            <div
-                              style={{
-                                width: 48,
-                                height: 48,
-                                borderRadius: 10,
-                                background: "rgba(159,167,255,0.12)",
-                              }}
-                            />
-                          )}
+                          <img
+                            src={normalizeImageUrl(room.image)}
+                            alt={room.room_name}
+                            onError={useFallbackImage}
+                            style={{
+                              width: 48,
+                              height: 48,
+                              borderRadius: 10,
+                              objectFit: "cover",
+                              background: "rgba(159,167,255,0.12)",
+                            }}
+                          />
                           <div>
                             <div style={{ fontWeight: 600 }}>{room.room_name}</div>
                             <div style={{ color: "#7b849e", fontSize: 12 }}>
@@ -671,6 +695,36 @@ export default function Rooms() {
                 />
               </Field>
 
+              <Field label="Upload ảnh phòng">
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleImageFileChange}
+                  disabled={uploadingImage || saving}
+                  style={inputStyle}
+                />
+                {uploadingImage && (
+                  <p style={{ color: "#a3aac4", fontSize: 12, margin: "6px 0 0" }}>
+                    Đang upload ảnh...
+                  </p>
+                )}
+                {form.image && (
+                  <img
+                    src={normalizeImageUrl(form.image)}
+                    alt="Room preview"
+                    onError={useFallbackImage}
+                    style={{
+                      width: "100%",
+                      height: 160,
+                      marginTop: 10,
+                      borderRadius: 10,
+                      objectFit: "cover",
+                      background: "rgba(159,167,255,0.12)",
+                    }}
+                  />
+                )}
+              </Field>
+
               <Field label="Mô tả">
                 <textarea
                   name="description"
@@ -706,7 +760,7 @@ export default function Rooms() {
                 <button
                   type="button"
                   onClick={closeModal}
-                  disabled={saving}
+                  disabled={saving || uploadingImage}
                   style={{
                     flex: 1,
                     padding: "12px",
@@ -722,7 +776,7 @@ export default function Rooms() {
                 </button>
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || uploadingImage}
                   style={{
                     flex: 1,
                     padding: "12px",
@@ -731,7 +785,7 @@ export default function Rooms() {
                     background: "#9fa7ff",
                     color: "#060e20",
                     fontWeight: 700,
-                    cursor: saving ? "not-allowed" : "pointer",
+                    cursor: saving || uploadingImage ? "not-allowed" : "pointer",
                   }}
                 >
                   {saving ? "Đang lưu..." : "Lưu"}

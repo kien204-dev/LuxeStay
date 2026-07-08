@@ -25,6 +25,22 @@ export const createRoom = async (roomData) => {
 };
 
 // =========================
+// UPLOAD ROOM IMAGE
+// =========================
+export const uploadRoomImage = async (file) => {
+  const formData = new FormData();
+  formData.append("image", file);
+
+  const response = await api.post("/rooms/upload-image", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+
+  return response.data;
+};
+
+// =========================
 // UPDATE ROOM
 // =========================
 export const updateRoom = async (id, roomData) => {
