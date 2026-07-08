@@ -23,10 +23,37 @@ const roomRoutes = require("./src/routes/roomRoutes");
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      // Cho phép request không có Origin (Postman, curl...)
+      if (!origin) return callback(null, true);
+
+      // Cho phép localhost
+      if (origin === "http://localhost:5173") {
+        return callback(null, true);
+      }
+
+      // Cho phép đúng domain trong biến môi trường
+      if (
+        allowedOrigins.includes(origin)
+      ) {
+        return callback(null, true);
+      }
+
+      // Cho phép tất cả domain Vercel của bạn
+      if (
+        origin.endsWith(".vercel.app")
+      ) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS blocked: ${origin}`));
+    },
     credentials: true,
   })
 );
+
+// Xử lý preflight request
+app.options("*", cors());
 
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
