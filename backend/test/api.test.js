@@ -9,6 +9,9 @@ function makeState() {
     nextUserId: 3,
     nextRoomId: 3,
     nextBookingId: 3,
+    nextResetTokenId: 1,
+    passwordResetTokens: [],
+    sentPasswordResetEmails: [],
     users: [
       {
         id: 1,
@@ -147,6 +150,13 @@ function makeFakePool(state) {
       return { rows: user ? [publicUser(user)] : [] };
     }
 
+    if (text.includes("update users set password=$1 where id=$2")) {
+      const user = state.users.find((item) => item.id === Number(params[1]));
+      if (!user) return { rows: [] };
+      user.password = params[0];
+      return { rows: [] };
+    }
+
     if (text.includes("insert into users")) {
       const role = text.includes("'user'") ? "user" : params[3];
       const user = {
@@ -179,6 +189,43 @@ function makeFakePool(state) {
       if (index === -1) return { rows: [] };
       const [deleted] = state.users.splice(index, 1);
       return { rows: [{ id: deleted.id }] };
+    }
+
+    if (text.includes("insert into password_reset_tokens")) {
+      const token = {
+        id: state.nextResetTokenId++,
+        user_id: Number(params[0]),
+        token_hash: params[1],
+        expires_at: params[2],
+        used_at: null,
+        created_at: new Date().toISOString(),
+      };
+      state.passwordResetTokens.push(token);
+      return { rows: [{ id: token.id }] };
+    }
+
+    if (text.includes("from password_reset_tokens")) {
+      const token = state.passwordResetTokens
+        .slice()
+        .reverse()
+        .find((item) => {
+          const expiresAt = new Date(item.expires_at);
+          return (
+            item.token_hash === params[0] &&
+            !item.used_at &&
+            expiresAt.getTime() > Date.now()
+          );
+        });
+
+      return {
+        rows: token ? [{ id: token.id, user_id: token.user_id }] : [],
+      };
+    }
+
+    if (text.includes("update password_reset_tokens set used_at")) {
+      const token = state.passwordResetTokens.find((item) => item.id === Number(params[0]));
+      if (token) token.used_at = new Date().toISOString();
+      return { rows: [] };
     }
 
     if (text.includes('as "totalrooms"')) {
@@ -375,14 +422,29 @@ describe("hotel booking API", () => {
   let baseUrl;
   let adminToken;
   let userToken;
+  let state;
 
   before(async () => {
+    state = makeState();
     const dbPath = require.resolve("../src/db/db.js");
     require.cache[dbPath] = {
       id: dbPath,
       filename: dbPath,
       loaded: true,
-      exports: makeFakePool(makeState()),
+      exports: makeFakePool(state),
+    };
+
+    const emailPath = require.resolve("../src/services/emailService.js");
+    require.cache[emailPath] = {
+      id: emailPath,
+      filename: emailPath,
+      loaded: true,
+      exports: {
+        assertEmailConfigured() {},
+        async sendPasswordResetEmail(payload) {
+          state.sentPasswordResetEmails.push(payload);
+        },
+      },
     };
 
     const serverPath = require.resolve("../server.js");
@@ -459,6 +521,55 @@ describe("hotel booking API", () => {
     assert.equal(result.body.user.email, "guest@example.com");
     assert.equal(result.body.user.role, "user");
     assert.equal(result.body.user.password, undefined);
+  });
+
+  it("sends password reset email and resets password with a hashed token", async () => {
+    const forgot = await request(baseUrl, "/api/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "user@example.com",
+      }),
+    });
+
+    assert.equal(forgot.response.status, 200);
+    assert.equal(state.sentPasswordResetEmails.length, 1);
+    assert.equal(state.passwordResetTokens.length, 1);
+
+    const email = state.sentPasswordResetEmails[0];
+    const resetUrl = new URL(email.resetUrl);
+    const rawToken = resetUrl.searchParams.get("token");
+
+    assert.ok(rawToken);
+    assert.notEqual(state.passwordResetTokens[0].token_hash, rawToken);
+
+    const reset = await request(baseUrl, "/api/reset-password", {
+      method: "POST",
+      body: JSON.stringify({
+        token: rawToken,
+        password: "newpass123",
+      }),
+    });
+
+    assert.equal(reset.response.status, 200);
+    assert.ok(state.passwordResetTokens[0].used_at);
+
+    const oldLogin = await request(baseUrl, "/api/login", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "user@example.com",
+        password: "user123",
+      }),
+    });
+    assert.equal(oldLogin.response.status, 401);
+
+    const newLogin = await request(baseUrl, "/api/login", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "user@example.com",
+        password: "newpass123",
+      }),
+    });
+    assert.equal(newLogin.response.status, 200);
   });
 
   it("returns rooms publicly and protects room writes", async () => {
