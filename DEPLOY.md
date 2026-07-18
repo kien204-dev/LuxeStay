@@ -41,6 +41,8 @@ Run the base schema first, then run these migrations in order in Neon SQL Editor
 ```text
 backend/src/db/migrations/001_create_password_reset_tokens.sql
 backend/src/db/migrations/002_add_user_profile_fields.sql
+backend/src/db/migrations/003_add_auth_security_fields.sql
+backend/src/db/migrations/004_add_booking_guests.sql
 ```
 
 Make sure the base tables already exist before running these migration files:
@@ -72,6 +74,14 @@ DB_USER=neondb_owner
 DB_PASSWORD=your_real_neon_password
 
 JWT_SECRET=your_long_random_jwt_secret
+AUTH_TOKEN_TTL=1d
+AUTH_COOKIE_NAME=luxestay_session
+AUTH_COOKIE_MAX_AGE_MS=86400000
+AUTH_COOKIE_SECURE=true
+AUTH_COOKIE_SAME_SITE=none
+TRUST_PROXY_HOPS=1
+FIREBASE_PROJECT_ID=booking-hotel-be19e
+FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"replace_me"}
 RESET_TOKEN_TTL_MINUTES=15
 
 SMTP_HOST=smtp.example.com

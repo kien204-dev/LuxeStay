@@ -11,26 +11,24 @@ export const AuthProvider = ({ children }) => {
         return JSON.parse(storedUser);
       } catch {
         localStorage.removeItem("user");
-        localStorage.removeItem("token");
       }
     }
 
     return null;
   });
 
-  const login = useCallback((userData, token) => {
+  const login = useCallback((userData) => {
     localStorage.setItem("user", JSON.stringify(userData));
-
-    if (token) {
-      localStorage.setItem("token", token);
-    }
-
     setUser(userData);
   }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem("user");
-    localStorage.removeItem("token");
+    const apiBaseUrl = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+    fetch(`${apiBaseUrl}/logout`, {
+      method: "POST",
+      credentials: "include",
+    }).catch(() => {});
     setUser(null);
   }, []);
 

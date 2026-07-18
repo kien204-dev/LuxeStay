@@ -1,8 +1,9 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 function PrivateRoute({ children, role }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -22,6 +23,13 @@ function PrivateRoute({ children, role }) {
   // Chưa login
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (
+    user.must_change_password &&
+    !["/settings", "/profile"].includes(location.pathname)
+  ) {
+    return <Navigate to="/settings" replace />;
   }
 
   // Không đúng role

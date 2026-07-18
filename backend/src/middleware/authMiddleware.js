@@ -1,62 +1,88 @@
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
+const pool = require("../db/db");
+const { readAuthToken } = require("../services/authSession");
 
 const SECRET = process.env.JWT_SECRET;
 
-// Middleware kiểm tra người dùng đã đăng nhập chưa
-function verifyToken(req, res, next) {
-  const authHeader = req.headers["authorization"];
+function unauthorized(res, message = "Token is invalid or expired") {
+  return res.status(401).json({ message });
+}
 
-  if (!authHeader) {
-    return res.status(401).json({
-      message: "Chưa đăng nhập hoặc thiếu token",
-    });
+async function verifyToken(req, res, next) {
+  const auth = readAuthToken(req);
+
+  if (!auth) {
+    return unauthorized(res, "Authentication is required");
   }
-
-  const parts = authHeader.split(" ");
-
-  if (parts.length !== 2 || parts[0] !== "Bearer") {
-    return res.status(403).json({
-      message: "Định dạng token không hợp lệ",
-    });
-  }
-
-  const token = parts[1];
 
   try {
-    const decoded = jwt.verify(token, SECRET);
+    const decoded = jwt.verify(auth.token, SECRET, { algorithms: ["HS256"] });
+    const userId = Number(decoded.id);
 
-    // Lưu thông tin user vào req.user
-    req.user = decoded;
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return unauthorized(res);
+    }
 
-    next();
-  } catch {
-    return res.status(401).json({
-      message: "Token không hợp lệ hoặc đã hết hạn",
-    });
+    const result = await pool.query(
+      `SELECT id, email, role, token_version, must_change_password, deleted_at
+       FROM users
+       WHERE id = $1`,
+      [userId]
+    );
+    const currentUser = result.rows[0];
+
+    if (!currentUser || currentUser.deleted_at) {
+      return unauthorized(res);
+    }
+
+    const tokenVersion = Number(decoded.tokenVersion);
+    const currentVersion = Number(currentUser.token_version) || 0;
+    if (!Number.isInteger(tokenVersion) || tokenVersion !== currentVersion) {
+      return unauthorized(res, "Session has been revoked");
+    }
+
+    req.user = {
+      id: currentUser.id,
+      email: currentUser.email,
+      role: currentUser.role,
+      token_version: currentVersion,
+      must_change_password: Boolean(currentUser.must_change_password),
+    };
+    req.authSource = auth.source;
+
+    const passwordChangeRoute = req.originalUrl === "/api/users/me/password";
+    const logoutRoute = req.originalUrl === "/api/logout";
+    if (req.user.must_change_password && !passwordChangeRoute && !logoutRoute) {
+      return res.status(403).json({
+        code: "PASSWORD_CHANGE_REQUIRED",
+        message: "You must change your password before continuing",
+      });
+    }
+
+    return next();
+  } catch (err) {
+    if (err instanceof jwt.TokenExpiredError) {
+      return unauthorized(res, "Token has expired");
+    }
+    return unauthorized(res);
   }
 }
 
-// Middleware kiểm tra quyền role
 function checkRole(...roles) {
   return function (req, res, next) {
     if (!req.user) {
-      return res.status(401).json({
-        message: "Chưa xác thực người dùng",
-      });
+      return unauthorized(res, "Authentication is required");
     }
 
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
-        message: "Bạn không có quyền truy cập chức năng này",
+        message: "You do not have permission to access this resource",
       });
     }
 
-    next();
+    return next();
   };
 }
 
-module.exports = {
-  verifyToken,
-  checkRole,
-};
+module.exports = { verifyToken, checkRole };

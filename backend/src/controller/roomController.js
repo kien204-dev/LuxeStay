@@ -5,6 +5,12 @@ const ROOM_SORT_COLUMNS = {
   price: "price",
   created_at: "created_at",
 };
+const ROOM_STATUSES = new Set(["available", "booked", "maintenance"]);
+
+function parseId(value) {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
 
 function parsePositiveInteger(value, fallback) {
   const numberValue = Number(value);
@@ -134,7 +140,8 @@ exports.getRooms = async (req, res) => {
 // ======================
 exports.getRoomById = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ message: "Room id must be a positive integer" });
 
     const result = await pool.query(
       `SELECT id, room_name, room_type, price, description, capacity, image, status, created_at
@@ -194,6 +201,11 @@ exports.createRoom = async (req, res) => {
       });
     }
 
+    const roomStatus = status || "available";
+    if (!ROOM_STATUSES.has(roomStatus)) {
+      return res.status(400).json({ message: "Room status is invalid" });
+    }
+
     const result = await pool.query(
       `INSERT INTO rooms(room_name, room_type, price, description, capacity, image, status)
        VALUES($1,$2,$3,$4,$5,$6,$7)
@@ -205,7 +217,7 @@ exports.createRoom = async (req, res) => {
         description || null,
         parsedCapacity,
         image || null,
-        status || "available",
+        roomStatus,
       ]
     );
 
@@ -226,7 +238,8 @@ exports.createRoom = async (req, res) => {
 // ======================
 exports.updateRoom = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ message: "Room id must be a positive integer" });
 
     const {
       room_name,
@@ -259,6 +272,11 @@ exports.updateRoom = async (req, res) => {
       });
     }
 
+    const roomStatus = status || "available";
+    if (!ROOM_STATUSES.has(roomStatus)) {
+      return res.status(400).json({ message: "Room status is invalid" });
+    }
+
     const result = await pool.query(
       `UPDATE rooms
        SET
@@ -278,7 +296,7 @@ exports.updateRoom = async (req, res) => {
         description || null,
         parsedCapacity,
         image || null,
-        status || "available",
+        roomStatus,
         id,
       ]
     );
@@ -306,7 +324,8 @@ exports.updateRoom = async (req, res) => {
 // ======================
 exports.deleteRoom = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ message: "Room id must be a positive integer" });
 
     // Chặn xóa phòng nếu đang có booking tham chiếu tới nó
     const bookingCheck = await pool.query(

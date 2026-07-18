@@ -31,6 +31,10 @@ useEffect(() => {
 
   // ✅ Hàm phân quyền dùng chung
   const redirectByRole = (user) => {
+    if (user.must_change_password) {
+      navigate("/settings");
+      return;
+    }
     if (user.role === "admin") {
       navigate("/dashboard");
     } else {
@@ -45,13 +49,11 @@ useEffect(() => {
       setLoading(true);
 
       const result = await signInWithPopup(auth, provider);
+      const idToken = await result.user.getIdToken();
 
-      const res = await api.post("/google-login", {
-        name: result.user.displayName,
-        email: result.user.email,
-      });
+      const res = await api.post("/google-login", { idToken });
 
-      login(res.data.user, res.data.token);
+      login(res.data.user);
 
       redirectByRole(res.data.user);
 
@@ -88,7 +90,7 @@ useEffect(() => {
 
       const res = await api.post("/login", { email, password });
 
-      login(res.data.user, res.data.token);
+      login(res.data.user);
 
       redirectByRole(res.data.user);
     } catch (err) {

@@ -525,6 +525,7 @@ function BookingDetailModal({ booking, onClose }) {
               <DetailItem label="Check-in" value={formatDate(booking.check_in)} />
               <DetailItem label="Check-out" value={formatDate(booking.check_out)} />
               <DetailItem label="Số đêm" value={`${nights} đêm`} />
+              <DetailItem label="Số khách" value={`${booking.guests || 1} khách`} />
               {booking.room_capacity && (
                 <DetailItem label="Sức chứa phòng" value={`${booking.room_capacity} khách`} />
               )}

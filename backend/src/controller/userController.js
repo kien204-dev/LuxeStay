@@ -1,5 +1,6 @@
 const pool = require("../db/db.js");
 const bcrypt = require("bcryptjs");
+const { setAuthCookie } = require("../services/authSession");
 
 const ALLOWED_ROLES = ["admin", "user"];
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -37,7 +38,7 @@ function isForeignKeyError(err) {
 }
 
 function publicUserSelect() {
-  return "id, name, email, role, phone, bio, avatar_url, created_at, updated_at";
+  return "id, name, email, role, phone, bio, avatar_url, created_at, updated_at, must_change_password";
 }
 
 // ======================
@@ -48,6 +49,7 @@ exports.getUsers = async (req, res) => {
     const result = await pool.query(
       `SELECT ${publicUserSelect()}
        FROM users
+       WHERE deleted_at IS NULL
        ORDER BY id ASC`
     );
 
@@ -76,7 +78,7 @@ exports.getUserById = async (req, res) => {
     const result = await pool.query(
       `SELECT ${publicUserSelect()}
        FROM users
-       WHERE id = $1`,
+       WHERE id = $1 AND deleted_at IS NULL`,
       [id]
     );
 
@@ -119,9 +121,9 @@ exports.createUser = async (req, res) => {
       });
     }
 
-    if (!validatePassword(password)) {
+    if (!validatePassword(password) || password.length < 8) {
       return res.status(400).json({
-        message: "Password must be at least 6 characters",
+        message: "Temporary password must be at least 8 characters",
       });
     }
 
@@ -152,8 +154,8 @@ exports.createUser = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const result = await pool.query(
-      `INSERT INTO users(name,email,password,role,phone)
-       VALUES($1,$2,$3,$4,$5)
+      `INSERT INTO users(name,email,password,role,phone,must_change_password)
+       VALUES($1,$2,$3,$4,$5,TRUE)
        RETURNING ${publicUserSelect()}`,
       [
         name,
@@ -254,8 +256,10 @@ exports.updateUser = async (req, res) => {
       role=$3,
       password=$4,
       phone=$5,
+      token_version=token_version + 1,
+      must_change_password=TRUE,
       updated_at=CURRENT_TIMESTAMP
-      WHERE id=$6
+      WHERE id=$6 AND deleted_at IS NULL
       RETURNING ${publicUserSelect()}
       `;
 
@@ -277,8 +281,9 @@ exports.updateUser = async (req, res) => {
       email=$2,
       role=$3,
       phone=$4,
+      token_version=token_version + CASE WHEN role IS DISTINCT FROM $3 THEN 1 ELSE 0 END,
       updated_at=CURRENT_TIMESTAMP
-      WHERE id=$5
+      WHERE id=$5 AND deleted_at IS NULL
       RETURNING ${publicUserSelect()}
       `;
 
@@ -333,7 +338,12 @@ exports.deleteUser = async (req, res) => {
     }
 
     const result = await pool.query(
-      "DELETE FROM users WHERE id=$1 RETURNING id",
+      `UPDATE users
+       SET deleted_at=CURRENT_TIMESTAMP,
+           token_version=token_version + 1,
+           updated_at=CURRENT_TIMESTAMP
+       WHERE id=$1 AND deleted_at IS NULL
+       RETURNING id`,
       [id]
     );
 
@@ -374,7 +384,7 @@ exports.getCurrentUser = async (req, res) => {
     const result = await pool.query(
       `SELECT ${publicUserSelect()}
        FROM users
-       WHERE id = $1`,
+       WHERE id = $1 AND deleted_at IS NULL`,
       [req.user.id]
     );
 
@@ -443,7 +453,7 @@ exports.updateCurrentUser = async (req, res) => {
          bio=$4,
          avatar_url=$5,
          updated_at=CURRENT_TIMESTAMP
-       WHERE id=$6
+       WHERE id=$6 AND deleted_at IS NULL
        RETURNING ${publicUserSelect()}`,
       [
         name,
@@ -493,7 +503,7 @@ exports.changeCurrentUserPassword = async (req, res) => {
     }
 
     const result = await pool.query(
-      "SELECT id, password FROM users WHERE id = $1",
+      "SELECT id, password FROM users WHERE id = $1 AND deleted_at IS NULL",
       [req.user.id]
     );
 
@@ -514,10 +524,22 @@ exports.changeCurrentUserPassword = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    await pool.query(
-      "UPDATE users SET password=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2",
+    const updatedResult = await pool.query(
+      `UPDATE users
+       SET password=$1,
+           token_version=token_version + 1,
+           must_change_password=FALSE,
+           updated_at=CURRENT_TIMESTAMP
+       WHERE id=$2 AND deleted_at IS NULL
+       RETURNING id, email, role, token_version, must_change_password`,
       [hashedPassword, req.user.id]
     );
+
+    if (updatedResult.rows.length === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    setAuthCookie(res, updatedResult.rows[0]);
 
     res.json({
       message: "Password changed successfully",

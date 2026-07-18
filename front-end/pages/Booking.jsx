@@ -133,15 +133,23 @@ function Booking() {
     const [vnPage, setVnPage] = useState(0);
     const [rooms, setRooms] = useState([]);
     const [roomsLoading, setRoomsLoading] = useState(true);
+    const [roomsError, setRoomsError] = useState("");
     const [bookingSubmitting, setBookingSubmitting] = useState(false);
 
     useEffect(() => {
       getRooms()
         .then((data) => {
+          setRoomsError("");
           const available = data.filter((r) => r.status !== "maintenance");
           setRooms(available.map(mapRoomForDisplay));
         })
-        .catch(() => setRooms([]))
+        .catch((err) => {
+          setRooms([]);
+          setRoomsError(
+            err.response?.data?.message ||
+            "Không thể tải danh sách phòng. Vui lòng thử lại sau."
+          );
+        })
         .finally(() => setRoomsLoading(false));
     }, []);
 
@@ -530,6 +538,10 @@ function Booking() {
                         {roomsLoading ? (
                             <p style={{ textAlign: "center", color: "#64748b", padding: "40px 0" }}>
                                 Đang tải danh sách phòng...
+                            </p>
+                        ) : roomsError ? (
+                            <p role="alert" style={{ textAlign: "center", color: "#b91c1c", padding: "40px 0" }}>
+                                {roomsError}
                             </p>
                         ) : rooms.length === 0 ? (
                             <p style={{ textAlign: "center", color: "#64748b", padding: "40px 0" }}>

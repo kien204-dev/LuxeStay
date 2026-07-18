@@ -9,32 +9,28 @@ const api = axios.create({
   },
 });
 
-// ================= REQUEST =================
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("token");
+const PUBLIC_AUTH_PATHS = new Set([
+  "/login",
+  "/register",
+  "/google-login",
+  "/forgot-password",
+  "/reset-password",
+]);
 
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// ================= RESPONSE =================
 api.interceptors.response.use(
   (response) => response,
-
   (error) => {
-    if (error.response?.status === 401) {
-      // Token hết hạn hoặc không hợp lệ
-      localStorage.removeItem("token");
+    const requestPath = String(error.config?.url || "").split("?")[0];
+    const isPublicAuthRequest = PUBLIC_AUTH_PATHS.has(requestPath);
+
+    // A 401 from a public credential endpoint must remain on the page so its
+    // validation message can be shown. Protected requests still end the session.
+    if (error.response?.status === 401 && !isPublicAuthRequest) {
       localStorage.removeItem("user");
 
-      // Chuyển về trang đăng nhập
-      window.location.href = "/login";
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
     }
 
     return Promise.reject(error);

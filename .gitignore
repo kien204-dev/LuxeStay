@@ -21,6 +21,8 @@ front-end/.env
 front-end/.env.*
 !front-end/.env.example
 backend/uploads/
+*.sql
+!backend/src/db/migrations/*.sql
 
 # Editor directories and files
 .vscode/*

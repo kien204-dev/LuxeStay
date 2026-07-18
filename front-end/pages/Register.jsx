@@ -15,6 +15,10 @@ export default function Register() {
     const navigate = useNavigate();
 
     const redirectByRole = (user) => {
+        if (user.must_change_password) {
+            navigate("/settings");
+            return;
+        }
         if (user.role === "admin") {
             navigate("/dashboard");
         } else {
@@ -59,13 +63,11 @@ const handleChange = (e) => {
             const result = await signInWithPopup(auth, provider);
 
             const user = result.user;
+            const idToken = await user.getIdToken();
 
-            const res = await api.post("/google-login", {
-                name: user.displayName,
-                email: user.email,
-            });
+            const res = await api.post("/google-login", { idToken });
 
-            login(res.data.user, res.data.token);
+            login(res.data.user);
 
             redirectByRole(res.data.user);
 

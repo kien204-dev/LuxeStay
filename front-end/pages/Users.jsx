@@ -87,7 +87,7 @@ export default function Users() {
   const [form, setForm] = useState({
     name: "",
     email: "",
-    password: "123456",
+    password: "",
     role: "user",
   });
 
@@ -157,9 +157,8 @@ export default function Users() {
   const handleAddUser = async () => {
     setModalError("");
 
-    if (!form.name || !form.email) {
-      setModalError("Nhap thieu ten hoac email");
-      alert("Nhập thiếu tên hoặc email!");
+    if (!form.name || !form.email || form.password.length < 8) {
+      setModalError("Name, email and a temporary password of at least 8 characters are required");
       return;
     }
 
@@ -169,7 +168,7 @@ export default function Users() {
       const res = await createUser({
         name: form.name,
         email: form.email,
-        password: form.password || "123456",
+        password: form.password,
         role: form.role || "user",
       });
 
@@ -180,7 +179,7 @@ export default function Users() {
       setForm({
         name: "",
         email: "",
-        password: "123456",
+        password: "",
         role: "user",
       });
     } catch (err) {
@@ -387,6 +386,8 @@ export default function Users() {
               />
 
               <input
+                type="password"
+                autoComplete="new-password"
                 placeholder="Password"
                 value={form.password}
                 onChange={(e) =>

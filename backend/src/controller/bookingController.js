@@ -3,6 +3,11 @@ const pool = require("../db/db.js");
 const ACTIVE_STATUSES = ["pending", "confirmed"];
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
+function parseId(value) {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
 function parseDateOnly(dateStr) {
   if (typeof dateStr !== "string" || !DATE_ONLY_PATTERN.test(dateStr)) {
     return null;
@@ -88,6 +93,7 @@ const BOOKING_SELECT = `
     b.check_in,
     b.check_out,
     b.total_price,
+    b.guests,
     b.status,
     b.created_at,
     u.name AS user_name,
@@ -123,7 +129,11 @@ exports.getBookings = async (req, res) => {
 };
 
 exports.getBookingById = async (req, res) => {
-  const { id } = req.params;
+  const id = parseId(req.params.id);
+
+  if (!id) {
+    return res.status(400).json({ message: "Booking id must be a positive integer" });
+  }
 
   try {
     const result = await pool.query(
@@ -197,9 +207,10 @@ exports.createBooking = async (req, res) => {
     });
   }
 
-  const client = await pool.connect();
+  let client;
 
   try {
+    client = await pool.connect();
     await client.query("BEGIN");
 
     const roomResult = await client.query(
@@ -250,11 +261,11 @@ exports.createBooking = async (req, res) => {
 
     const result = await client.query(
       `
-      INSERT INTO bookings (user_id, room_id, check_in, check_out, total_price, status)
-      VALUES ($1, $2, $3::date, $4::date, $5, 'pending')
+      INSERT INTO bookings (user_id, room_id, check_in, check_out, total_price, guests, status)
+      VALUES ($1, $2, $3::date, $4::date, $5, $6, 'pending')
       RETURNING *
       `,
-      [user_id, roomId, check_in, check_out, total_price]
+      [user_id, roomId, check_in, check_out, total_price, guestCount]
     );
 
     await syncRoomStatus(client, roomId);
@@ -268,17 +279,21 @@ exports.createBooking = async (req, res) => {
       nights,
     });
   } catch (err) {
-    await client.query("ROLLBACK");
+    if (client) await client.query("ROLLBACK");
     console.error("CREATE BOOKING ERROR:", err);
     res.status(500).json({ message: "Lỗi server khi tạo booking" });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 };
 
 exports.updateBookingStatus = async (req, res) => {
-  const { id } = req.params;
+  const id = parseId(req.params.id);
   const { status } = req.body;
+
+  if (!id) {
+    return res.status(400).json({ message: "Booking id must be a positive integer" });
+  }
 
   const allowStatus = ["pending", "confirmed", "cancelled", "completed"];
 
@@ -286,9 +301,10 @@ exports.updateBookingStatus = async (req, res) => {
     return res.status(400).json({ message: "Trạng thái booking không hợp lệ" });
   }
 
-  const client = await pool.connect();
+  let client;
 
   try {
+    client = await pool.connect();
     await client.query("BEGIN");
 
     const result = await client.query(
@@ -313,19 +329,23 @@ exports.updateBookingStatus = async (req, res) => {
       booking,
     });
   } catch (err) {
-    await client.query("ROLLBACK");
+    if (client) await client.query("ROLLBACK");
     console.error("UPDATE BOOKING ERROR:", err);
     res.status(500).json({ message: "Lỗi server" });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 };
 
 exports.cancelBooking = async (req, res) => {
-  const { id } = req.params;
-  const client = await pool.connect();
+  const id = parseId(req.params.id);
+  if (!id) {
+    return res.status(400).json({ message: "Booking id must be a positive integer" });
+  }
+  let client;
 
   try {
+    client = await pool.connect();
     await client.query("BEGIN");
 
     const existing = await client.query(
@@ -370,19 +390,23 @@ exports.cancelBooking = async (req, res) => {
       booking: result.rows[0],
     });
   } catch (err) {
-    await client.query("ROLLBACK");
+    if (client) await client.query("ROLLBACK");
     console.error("CANCEL BOOKING ERROR:", err);
     res.status(500).json({ message: "Lỗi server khi hủy booking" });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 };
 
 exports.deleteBooking = async (req, res) => {
-  const { id } = req.params;
-  const client = await pool.connect();
+  const id = parseId(req.params.id);
+  if (!id) {
+    return res.status(400).json({ message: "Booking id must be a positive integer" });
+  }
+  let client;
 
   try {
+    client = await pool.connect();
     await client.query("BEGIN");
 
     const bookingCheck = await client.query(
@@ -411,10 +435,10 @@ exports.deleteBooking = async (req, res) => {
       booking: result.rows[0],
     });
   } catch (err) {
-    await client.query("ROLLBACK");
+    if (client) await client.query("ROLLBACK");
     console.error("DELETE BOOKING ERROR:", err);
     res.status(500).json({ message: "Lỗi server khi xóa booking" });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 };

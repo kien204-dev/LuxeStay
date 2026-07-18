@@ -45,7 +45,7 @@ exports.getDashboardStats = async (req, res) => {
         (SELECT COUNT(*) FROM rooms)::int AS "totalRooms",
         (SELECT COUNT(*) FROM rooms WHERE status = 'available')::int AS "availableRooms",
         (SELECT COUNT(*) FROM rooms WHERE status = 'booked')::int AS "bookedRooms",
-        (SELECT COUNT(*) FROM users)::int AS "totalUsers",
+        (SELECT COUNT(*) FROM users WHERE deleted_at IS NULL)::int AS "totalUsers",
         (SELECT COUNT(*) FROM bookings)::int AS "totalBookings",
         COALESCE((
           SELECT SUM(total_price)

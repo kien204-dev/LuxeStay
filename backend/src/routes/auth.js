@@ -1,23 +1,35 @@
 const express = require("express");
-const router = express.Router();
-const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const pool = require("../db/db");
+const { verifyFirebaseIdToken } = require("../services/firebaseAdmin");
+const { clearAuthCookie, setAuthCookie } = require("../services/authSession");
+const {
+  forgotPasswordRateLimit,
+  loginRateLimit,
+  resetPasswordRateLimit,
+} = require("../middleware/authRateLimit");
 const {
   assertEmailConfigured,
   sendPasswordResetEmail,
 } = require("../services/emailService");
 
-const SECRET = process.env.JWT_SECRET;
+const router = express.Router();
 const RESET_RESPONSE_MESSAGE =
   "If this email exists, a password reset link has been sent.";
-
 const PUBLIC_USER_FIELDS =
-  "id,name,email,role,phone,bio,avatar_url,created_at,updated_at";
+  "id,name,email,role,phone,bio,avatar_url,created_at,updated_at,must_change_password";
+const AUTH_USER_FIELDS = `${PUBLIC_USER_FIELDS},token_version,deleted_at`;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-if (!SECRET) {
-  throw new Error("JWT_SECRET chưa được cấu hình trong file .env");
+function publicUser(user) {
+  const {
+    password: _password,
+    token_version: _tokenVersion,
+    deleted_at: _deletedAt,
+    ...safeUser
+  } = user;
+  return safeUser;
 }
 
 function getResetTokenTtlMinutes() {
@@ -29,157 +41,103 @@ function hashResetToken(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
-// ================= LOGIN =================
-router.post("/login", async (req, res) => {
+router.post("/login", loginRateLimit, async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const email = typeof req.body.email === "string" ? req.body.email.trim() : "";
+    const password = req.body.password;
 
-    if (!email || !password) {
-      return res.status(400).json({
-        message: "Vui lòng nhập email và mật khẩu",
-      });
+    if (!email || typeof password !== "string" || !password) {
+      return res.status(400).json({ message: "Email and password are required" });
     }
 
     const result = await pool.query(
-      `SELECT ${PUBLIC_USER_FIELDS},password
+      `SELECT ${AUTH_USER_FIELDS},password
        FROM users
-       WHERE email=$1`,
+       WHERE LOWER(email)=LOWER($1) AND deleted_at IS NULL`,
       [email]
     );
 
     if (result.rows.length === 0) {
-      return res.status(401).json({
-        message: "Email hoặc mật khẩu không đúng",
-      });
+      return res.status(401).json({ message: "Email or password is incorrect" });
     }
 
     const user = result.rows[0];
-
     const isMatch = await bcrypt.compare(password, user.password);
-
     if (!isMatch) {
-      return res.status(401).json({
-        message: "Email hoặc mật khẩu không đúng",
-      });
+      return res.status(401).json({ message: "Email or password is incorrect" });
     }
 
-    const token = jwt.sign(
-      {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-      },
-      SECRET,
-      {
-        expiresIn: "1d",
-      }
-    );
-
-    const { password: _, ...safeUser } = user;
-
-    res.json({
-      message: "Đăng nhập thành công",
-      token,
-      user: safeUser,
+    setAuthCookie(res, user);
+    return res.json({
+      message: "Login successful",
+      user: publicUser(user),
     });
-
   } catch (err) {
-
-    console.error(err);
-
-    res.status(500).json({
-      message: "Lỗi server",
-    });
-
+    console.error("LOGIN ERROR:", err);
+    return res.status(500).json({ message: "Unable to log in" });
   }
 });
 
-// ================= REGISTER =================
 router.post("/register", async (req, res) => {
-
   try {
-
-    const { name, email, password } = req.body;
+    const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+    const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const password = req.body.password;
 
     if (!name || !email || !password) {
-
-      return res.status(400).json({
-        message: "Vui lòng nhập đầy đủ thông tin",
-      });
-
+      return res.status(400).json({ message: "Name, email and password are required" });
+    }
+    if (!EMAIL_PATTERN.test(email)) {
+      return res.status(400).json({ message: "Email is invalid" });
+    }
+    if (typeof password !== "string" || password.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
     }
 
     const check = await pool.query(
-      "SELECT id FROM users WHERE email=$1",
+      "SELECT id FROM users WHERE LOWER(email)=LOWER($1)",
       [email]
     );
-
     if (check.rows.length > 0) {
-
-      return res.status(400).json({
-        message: "Email đã tồn tại",
-      });
-
+      return res.status(400).json({ message: "Email already exists" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-
     const result = await pool.query(
       `INSERT INTO users(name,email,password,role)
        VALUES($1,$2,$3,'user')
        RETURNING ${PUBLIC_USER_FIELDS}`,
-      [
-        name,
-        email,
-        hashedPassword,
-      ]
+      [name, email, hashedPassword]
     );
 
-    res.status(201).json({
-      message: "Đăng ký thành công",
+    return res.status(201).json({
+      message: "Registration successful",
       user: result.rows[0],
     });
-
   } catch (err) {
-
-    console.error(err);
-
-    res.status(500).json({
-      message: "Lỗi server",
-    });
-
+    console.error("REGISTER ERROR:", err);
+    return res.status(500).json({ message: "Unable to register" });
   }
-
 });
 
-// ================= FORGOT PASSWORD =================
-router.post("/forgot-password", async (req, res) => {
+router.post("/forgot-password", forgotPasswordRateLimit, async (req, res) => {
   try {
-    const { email } = req.body;
-
-    if (!email) {
-      return res.status(400).json({
-        message: "Email is required",
-      });
-    }
+    const email = typeof req.body.email === "string" ? req.body.email.trim() : "";
+    if (!email) return res.status(400).json({ message: "Email is required" });
 
     try {
       assertEmailConfigured();
     } catch (configError) {
-      return res.status(500).json({
-        message: configError.message,
-      });
+      console.error("EMAIL CONFIGURATION ERROR:", configError);
+      return res.status(500).json({ message: "Password reset email is unavailable" });
     }
 
     const userResult = await pool.query(
-      "SELECT id, name, email FROM users WHERE email=$1",
+      "SELECT id, name, email FROM users WHERE LOWER(email)=LOWER($1) AND deleted_at IS NULL",
       [email]
     );
-
     if (userResult.rows.length === 0) {
-      return res.json({
-        message: RESET_RESPONSE_MESSAGE,
-      });
+      return res.json({ message: RESET_RESPONSE_MESSAGE });
     }
 
     const user = userResult.rows[0];
@@ -195,43 +153,27 @@ router.post("/forgot-password", async (req, res) => {
 
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
     const resetUrl = `${frontendUrl.replace(/\/$/, "")}/reset-password?token=${rawToken}`;
+    await sendPasswordResetEmail({ to: user.email, name: user.name, resetUrl });
 
-    await sendPasswordResetEmail({
-      to: user.email,
-      name: user.name,
-      resetUrl,
-    });
-
-    res.json({
-      message: RESET_RESPONSE_MESSAGE,
-    });
+    return res.json({ message: RESET_RESPONSE_MESSAGE });
   } catch (err) {
     console.error("FORGOT PASSWORD ERROR:", err);
-    res.status(500).json({
-      message: "Unable to send password reset email",
-    });
+    return res.status(500).json({ message: "Unable to send password reset email" });
   }
 });
 
-// ================= RESET PASSWORD =================
-router.post("/reset-password", async (req, res) => {
+router.post("/reset-password", resetPasswordRateLimit, async (req, res) => {
   const { token, password } = req.body;
-
   if (!token || !password) {
-    return res.status(400).json({
-      message: "Token and password are required",
-    });
+    return res.status(400).json({ message: "Token and password are required" });
   }
-
   if (typeof password !== "string" || password.length < 6) {
-    return res.status(400).json({
-      message: "Password must be at least 6 characters",
-    });
+    return res.status(400).json({ message: "Password must be at least 6 characters" });
   }
 
-  const client = await pool.connect();
-
+  let client;
   try {
+    client = await pool.connect();
     await client.query("BEGIN");
 
     const tokenHash = hashResetToken(token);
@@ -239,8 +181,8 @@ router.post("/reset-password", async (req, res) => {
       `SELECT id, user_id
        FROM password_reset_tokens
        WHERE token_hash = $1
-       AND used_at IS NULL
-       AND expires_at > NOW()
+         AND used_at IS NULL
+         AND expires_at > NOW()
        ORDER BY id DESC
        LIMIT 1
        FOR UPDATE`,
@@ -249,117 +191,103 @@ router.post("/reset-password", async (req, res) => {
 
     if (tokenResult.rows.length === 0) {
       await client.query("ROLLBACK");
-      return res.status(400).json({
-        message: "Reset token is invalid or expired",
-      });
+      return res.status(400).json({ message: "Reset token is invalid or expired" });
     }
 
     const resetToken = tokenResult.rows[0];
     const hashedPassword = await bcrypt.hash(password, 10);
-
     await client.query(
-      "UPDATE users SET password=$1 WHERE id=$2",
+      `UPDATE users
+       SET password=$1,
+           token_version=token_version + 1,
+           must_change_password=FALSE,
+           updated_at=CURRENT_TIMESTAMP
+       WHERE id=$2`,
       [hashedPassword, resetToken.user_id]
     );
-
     await client.query(
       "UPDATE password_reset_tokens SET used_at = NOW() WHERE id=$1",
       [resetToken.id]
     );
-
     await client.query("COMMIT");
-
-    res.json({
-      message: "Password reset successfully",
-    });
+    return res.json({ message: "Password reset successfully" });
   } catch (err) {
-    await client.query("ROLLBACK");
+    if (client) await client.query("ROLLBACK");
     console.error("RESET PASSWORD ERROR:", err);
-    res.status(500).json({
-      message: "Unable to reset password",
-    });
+    return res.status(500).json({ message: "Unable to reset password" });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 
-// ================= GOOGLE LOGIN =================
-router.post("/google-login", async (req, res) => {
-
+router.post("/google-login", loginRateLimit, async (req, res) => {
   try {
-
-    const { name, email } = req.body;
-
-    if (!email) {
-
-      return res.status(400).json({
-        message: "Email không hợp lệ",
-      });
-
+    const { idToken } = req.body;
+    if (typeof idToken !== "string" || !idToken.trim()) {
+      return res.status(400).json({ message: "Firebase ID token is required" });
     }
 
+    let decoded;
+    try {
+      decoded = await verifyFirebaseIdToken(idToken);
+    } catch {
+      return res.status(401).json({
+        message: "Google authentication token is invalid or expired",
+      });
+    }
+
+    if (
+      decoded.firebase?.sign_in_provider !== "google.com" ||
+      decoded.email_verified !== true ||
+      typeof decoded.email !== "string"
+    ) {
+      return res.status(401).json({ message: "A verified Google account is required" });
+    }
+
+    const email = decoded.email.trim().toLowerCase();
+    const name = typeof decoded.name === "string" && decoded.name.trim()
+      ? decoded.name.trim()
+      : email.split("@")[0];
+
     let result = await pool.query(
-      `SELECT ${PUBLIC_USER_FIELDS}
+      `SELECT ${AUTH_USER_FIELDS}
        FROM users
-       WHERE email=$1`,
+       WHERE LOWER(email)=LOWER($1)`,
       [email]
     );
-
     let user;
 
     if (result.rows.length === 0) {
-
-      const randomPassword = Math.random().toString(36);
-
+      const randomPassword = crypto.randomBytes(32).toString("base64url");
       const hashed = await bcrypt.hash(randomPassword, 10);
-
       result = await pool.query(
         `INSERT INTO users(name,email,password,role)
          VALUES($1,$2,$3,'user')
-         RETURNING ${PUBLIC_USER_FIELDS}`,
-        [
-          name,
-          email,
-          hashed,
-        ]
+         RETURNING ${AUTH_USER_FIELDS}`,
+        [name, email, hashed]
       );
-
       user = result.rows[0];
-
     } else {
-
       user = result.rows[0];
-
+      if (user.deleted_at) {
+        return res.status(401).json({ message: "This account is disabled" });
+      }
     }
 
-    const token = jwt.sign(
-      {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-      },
-      SECRET,
-      {
-        expiresIn: "1h",
-      }
-    );
-
-    res.json({
-      message: "Google Login thành công",
-      token,
-      user,
+    setAuthCookie(res, user);
+    return res.json({
+      message: "Google login successful",
+      user: publicUser(user),
     });
-
   } catch (err) {
-
-    console.error(err);
-
-    res.status(500).json({
-      message: "Lỗi server",
-    });
-
+    console.error("GOOGLE LOGIN ERROR:", err);
+    return res.status(500).json({ message: "Unable to log in with Google" });
   }
+});
 
+router.post("/logout", (_req, res) => {
+  clearAuthCookie(res);
+  return res.status(204).send();
 });
 
 module.exports = router;

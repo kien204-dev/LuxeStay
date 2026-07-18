@@ -11,9 +11,11 @@ export default function PublicRoute({ children }) {
         return (
             <Navigate
                 replace
-                to={user.role === "admin"
-                    ? "/dashboard"
-                    : "/booking"}
+                to={user.must_change_password
+                    ? "/settings"
+                    : user.role === "admin"
+                        ? "/dashboard"
+                        : "/booking"}
             />
         );
     }

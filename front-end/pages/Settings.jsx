@@ -157,6 +157,7 @@ function Settings() {
       });
 
       setPasswordForm(initialPassword);
+      updateCurrentUser({ must_change_password: false });
       setPasswordSuccess(result.message || "Password changed successfully");
     } catch (err) {
       setPasswordError(

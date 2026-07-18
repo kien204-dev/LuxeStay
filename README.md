@@ -88,6 +88,14 @@ DB_PASSWORD=your_database_password
 DB_NAME=booking_hotel
 JWT_SECRET=replace_with_a_long_random_secret
 RESET_TOKEN_TTL_MINUTES=15
+AUTH_TOKEN_TTL=1d
+AUTH_COOKIE_NAME=luxestay_session
+AUTH_COOKIE_MAX_AGE_MS=86400000
+AUTH_COOKIE_SECURE=false
+AUTH_COOKIE_SAME_SITE=lax
+TRUST_PROXY_HOPS=1
+FIREBASE_PROJECT_ID=booking-hotel-be19e
+FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"replace_me"}
 SMTP_HOST=smtp.example.com
 SMTP_PORT=587
 SMTP_SECURE=false
@@ -112,10 +120,14 @@ Note: Firebase configuration is currently stored in `front-end/firebase.js`. For
 
 ## Database Migrations
 
-Create the base database tables first, then run the migration files in order. The repo currently includes migrations for password reset tokens and user profile fields:
+Create the base database tables first, then run every migration file in order. The security migrations add session revocation/soft-delete fields and booking guest counts:
 
 1. `backend/src/db/migrations/001_create_password_reset_tokens.sql`
 2. `backend/src/db/migrations/002_add_user_profile_fields.sql`
+3. `backend/src/db/migrations/003_add_auth_security_fields.sql`
+4. `backend/src/db/migrations/004_add_booking_guests.sql`
+
+Migration 003 invalidates legacy JWTs that do not contain `tokenVersion`. After applying it, users must log in again.
 
 Run these SQL files in pgAdmin or your preferred PostgreSQL client after the base `users`, `rooms`, and `bookings` tables exist.
 
@@ -278,6 +290,8 @@ Backend deployment:
 3. Run migrations in order:
    - `001_create_password_reset_tokens.sql`
    - `002_add_user_profile_fields.sql`
+   - `003_add_auth_security_fields.sql`
+   - `004_add_booking_guests.sql`
 4. Configure backend environment variables from `backend/.env.example`.
 5. Install dependencies with `npm install` inside `backend`.
 6. Start the server with `npm start`.
@@ -308,6 +322,20 @@ Do not commit:
 - Real SMTP credentials
 - Real database passwords
 - Real JWT secrets
+
+## Firebase Security Rules
+
+The repository includes deny-by-default Firestore rules in `firestore.rules`. A user may access only `users/{uid}`; an administrator needs the Firebase custom claim `admin: true` to access all user documents.
+
+Authenticate the Firebase CLI and deploy the reviewed rules explicitly:
+
+```bash
+firebase login
+firebase use booking-hotel-be19e
+firebase deploy --only firestore:rules
+```
+
+Do not deploy these rules blindly over a project with additional Firestore collections; extend the deny-by-default rules deliberately for each collection first.
 
 Important: if a sensitive file was committed before being added to `.gitignore`, remove it from Git tracking and rotate exposed secrets before publishing.
 

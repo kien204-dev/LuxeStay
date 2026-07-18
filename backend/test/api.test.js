@@ -1,8 +1,14 @@
 const assert = require("node:assert/strict");
 const { after, before, describe, it } = require("node:test");
 const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const fs = require("node:fs/promises");
+const path = require("node:path");
 
 process.env.JWT_SECRET = "test-secret";
+process.env.NODE_ENV = "test";
+process.env.AUTH_COOKIE_SECURE = "false";
+process.env.AUTH_COOKIE_SAME_SITE = "lax";
 
 function makeState() {
   return {
@@ -19,6 +25,9 @@ function makeState() {
         email: "admin@example.com",
         password: bcrypt.hashSync("admin123", 10),
         role: "admin",
+        token_version: 0,
+        must_change_password: false,
+        deleted_at: null,
         phone: "0900000001",
         bio: "System administrator",
         avatar_url: "https://example.com/admin.png",
@@ -31,6 +40,9 @@ function makeState() {
         email: "user@example.com",
         password: bcrypt.hashSync("user123", 10),
         role: "user",
+        token_version: 0,
+        must_change_password: false,
+        deleted_at: null,
         phone: null,
         bio: null,
         avatar_url: null,
@@ -70,6 +82,7 @@ function makeState() {
         check_in: "2099-01-10",
         check_out: "2099-01-12",
         total_price: 400,
+        guests: 2,
         status: "confirmed",
         created_at: "2026-01-05T00:00:00.000Z",
       },
@@ -80,6 +93,7 @@ function makeState() {
         check_in: "2099-02-10",
         check_out: "2099-02-11",
         total_price: 100,
+        guests: 1,
         status: "pending",
         created_at: "2026-01-06T00:00:00.000Z",
       },
@@ -129,9 +143,22 @@ function makeFakePool(state) {
       return { rows: [] };
     }
 
-    if (text.includes("from users") && text.includes("where email=$1")) {
-      const user = state.users.find((item) => item.email === params[0]);
+    if (
+      text.includes("from users") &&
+      (text.includes("where email=$1") || text.includes("where lower(email)=lower($1)"))
+    ) {
+      const user = state.users.find(
+        (item) => item.email.toLowerCase() === String(params[0]).toLowerCase() &&
+          (!text.includes("deleted_at is null") || !item.deleted_at)
+      );
       return { rows: user ? [text.includes("password") ? user : publicUser(user)] : [] };
+    }
+
+    if (text.includes("select id from users where lower(email)=lower($1)")) {
+      const user = state.users.find(
+        (item) => item.email.toLowerCase() === String(params[0]).toLowerCase()
+      );
+      return { rows: user ? [{ id: user.id }] : [] };
     }
 
     if (text.includes("select id from users where email = $1 and id != $2")) {
@@ -149,6 +176,7 @@ function makeFakePool(state) {
     if (text.includes("from users") && text.includes("order by id asc")) {
       return {
         rows: state.users
+          .filter((item) => !item.deleted_at)
           .slice()
           .sort((a, b) => a.id - b.id)
           .map(publicUser),
@@ -157,7 +185,7 @@ function makeFakePool(state) {
 
     if (text.includes("select id, password from users where id = $1")) {
       const user = state.users.find((item) => item.id === Number(params[0]));
-      return { rows: user ? [{ id: user.id, password: user.password }] : [] };
+      return { rows: user && !user.deleted_at ? [{ id: user.id, password: user.password }] : [] };
     }
 
     if (text.includes("from users") && text.includes("where id = $1")) {
@@ -165,15 +193,14 @@ function makeFakePool(state) {
       return { rows: user ? [publicUser(user)] : [] };
     }
 
-    if (
-      text.includes("update users set password=$1 where id=$2") ||
-      text.includes("update users set password=$1, updated_at=current_timestamp where id=$2")
-    ) {
+    if (text.includes("update users") && text.includes("set password=$1")) {
       const user = state.users.find((item) => item.id === Number(params[1]));
       if (!user) return { rows: [] };
       user.password = params[0];
+      if (text.includes("token_version=token_version + 1")) user.token_version += 1;
+      if (text.includes("must_change_password=false")) user.must_change_password = false;
       user.updated_at = new Date().toISOString();
-      return { rows: [] };
+      return { rows: [publicUser(user)] };
     }
 
     if (text.includes("insert into users")) {
@@ -184,6 +211,9 @@ function makeFakePool(state) {
         email: params[1],
         password: params[2],
         role,
+        token_version: 0,
+        must_change_password: text.includes("must_change_password") && text.includes("true"),
+        deleted_at: null,
         phone: params[4] || null,
         bio: null,
         avatar_url: null,
@@ -194,7 +224,7 @@ function makeFakePool(state) {
       return { rows: [publicUser(user)] };
     }
 
-    if (text.includes("update users")) {
+    if (text.includes("update users") && !text.includes("set deleted_at=current_timestamp")) {
       const hasPassword = text.includes("password=$4");
       const isSelfProfileUpdate = text.includes("avatar_url=$5");
       const id = Number(
@@ -210,6 +240,7 @@ function makeFakePool(state) {
         user.bio = params[3] || null;
         user.avatar_url = params[4] || null;
       } else {
+        const previousRole = user.role;
         user.role = params[2];
         if (hasPassword) {
           user.password = params[3];
@@ -217,16 +248,26 @@ function makeFakePool(state) {
         } else {
           user.phone = params[3] || null;
         }
+        if (text.includes("token_version=token_version + 1")) {
+          user.token_version += 1;
+        } else if (
+          text.includes("case when role is distinct from $3") &&
+          previousRole !== user.role
+        ) {
+          user.token_version += 1;
+        }
+        if (text.includes("must_change_password=true")) user.must_change_password = true;
       }
       user.updated_at = new Date().toISOString();
       return { rows: [publicUser(user)] };
     }
 
-    if (text.includes("delete from users")) {
-      const index = state.users.findIndex((item) => item.id === Number(params[0]));
-      if (index === -1) return { rows: [] };
-      const [deleted] = state.users.splice(index, 1);
-      return { rows: [{ id: deleted.id }] };
+    if (text.includes("update users") && text.includes("set deleted_at=current_timestamp")) {
+      const user = state.users.find((item) => item.id === Number(params[0]) && !item.deleted_at);
+      if (!user) return { rows: [] };
+      user.deleted_at = new Date().toISOString();
+      user.token_version += 1;
+      return { rows: [{ id: user.id }] };
     }
 
     if (text.includes("insert into password_reset_tokens")) {
@@ -480,6 +521,7 @@ function makeFakePool(state) {
         check_in: params[2],
         check_out: params[3],
         total_price: Number(params[4]),
+        guests: Number(params[5]),
         status: "pending",
         created_at: new Date().toISOString(),
       };
@@ -541,7 +583,15 @@ async function request(baseUrl, path, options = {}) {
 }
 
 function authHeader(token) {
-  return { Authorization: `Bearer ${token}` };
+  return { Cookie: token };
+}
+
+function authCookie(result) {
+  const setCookie = result.response.headers.get("set-cookie");
+  assert.ok(setCookie, "authentication response must set an HttpOnly cookie");
+  assert.match(setCookie, /HttpOnly/i);
+  assert.match(setCookie, /SameSite=Lax/i);
+  return setCookie.split(";", 1)[0];
 }
 
 describe("hotel booking API", () => {
@@ -574,6 +624,25 @@ describe("hotel booking API", () => {
       },
     };
 
+    const firebasePath = require.resolve("../src/services/firebaseAdmin.js");
+    require.cache[firebasePath] = {
+      id: firebasePath,
+      filename: firebasePath,
+      loaded: true,
+      exports: {
+        async verifyFirebaseIdToken(token) {
+          if (token !== "valid-google-token") throw new Error("invalid Firebase token");
+          return {
+            uid: "google-user-1",
+            email: "google@example.com",
+            email_verified: true,
+            name: "Google User",
+            firebase: { sign_in_provider: "google.com" },
+          };
+        },
+      },
+    };
+
     const serverPath = require.resolve("../server.js");
     delete require.cache[serverPath];
     const app = require("../server.js");
@@ -592,7 +661,7 @@ describe("hotel booking API", () => {
         password: "admin123",
       }),
     });
-    adminToken = adminLogin.body.token;
+    adminToken = authCookie(adminLogin);
 
     const userLogin = await request(baseUrl, "/api/login", {
       method: "POST",
@@ -601,7 +670,7 @@ describe("hotel booking API", () => {
         password: "user123",
       }),
     });
-    userToken = userLogin.body.token;
+    userToken = authCookie(userLogin);
   });
 
   after(async () => {
@@ -622,7 +691,8 @@ describe("hotel booking API", () => {
     assert.equal(ok.response.status, 200);
     assert.equal(ok.body.user.role, "admin");
     assert.equal(ok.body.user.password, undefined);
-    assert.ok(ok.body.token);
+    assert.equal(ok.body.token, undefined);
+    authCookie(ok);
 
     const bad = await request(baseUrl, "/api/login", {
       method: "POST",
@@ -633,6 +703,62 @@ describe("hotel booking API", () => {
     });
 
     assert.equal(bad.response.status, 401);
+  });
+
+  it("accepts only verified, unexpired Google ID tokens", async () => {
+    for (const idToken of ["fake-token", "expired-token", "wrong-signature-token"]) {
+      const rejected = await request(baseUrl, "/api/google-login", {
+        method: "POST",
+        body: JSON.stringify({ idToken }),
+      });
+      assert.equal(rejected.response.status, 401);
+      assert.equal(rejected.response.headers.get("set-cookie"), null);
+    }
+
+    const accepted = await request(baseUrl, "/api/google-login", {
+      method: "POST",
+      body: JSON.stringify({
+        idToken: "valid-google-token",
+        email: "admin@example.com",
+        name: "Forged Admin",
+      }),
+    });
+    assert.equal(accepted.response.status, 200);
+    assert.equal(accepted.body.user.email, "google@example.com");
+    assert.equal(accepted.body.user.role, "user");
+    authCookie(accepted);
+  });
+
+  it("rate limits login, forgot-password and reset-password endpoints", async () => {
+    process.env.NODE_ENV = "production";
+    try {
+      let response;
+      for (let index = 0; index < 11; index += 1) {
+        response = await request(baseUrl, "/api/login", {
+          method: "POST",
+          body: JSON.stringify({ email: "missing@example.com", password: "wrongpass" }),
+        });
+      }
+      assert.equal(response.response.status, 429);
+
+      for (let index = 0; index < 6; index += 1) {
+        response = await request(baseUrl, "/api/forgot-password", {
+          method: "POST",
+          body: JSON.stringify({ email: `missing-${index}@example.com` }),
+        });
+      }
+      assert.equal(response.response.status, 429);
+
+      for (let index = 0; index < 11; index += 1) {
+        response = await request(baseUrl, "/api/reset-password", {
+          method: "POST",
+          body: JSON.stringify({ token: `invalid-${index}`, password: "newpass123" }),
+        });
+      }
+      assert.equal(response.response.status, 429);
+    } finally {
+      process.env.NODE_ENV = "test";
+    }
   });
 
   it("registers a new user without exposing password", async () => {
@@ -681,6 +807,11 @@ describe("hotel booking API", () => {
     assert.equal(reset.response.status, 200);
     assert.ok(state.passwordResetTokens[0].used_at);
 
+    const revokedSession = await request(baseUrl, "/api/bookings", {
+      headers: authHeader(userToken),
+    });
+    assert.equal(revokedSession.response.status, 401);
+
     const oldLogin = await request(baseUrl, "/api/login", {
       method: "POST",
       body: JSON.stringify({
@@ -698,6 +829,7 @@ describe("hotel booking API", () => {
       }),
     });
     assert.equal(newLogin.response.status, 200);
+    userToken = authCookie(newLogin);
   });
 
   it("returns rooms publicly and protects room writes", async () => {
@@ -754,6 +886,39 @@ describe("hotel booking API", () => {
     assert.equal(invalidCapacity.response.status, 400);
   });
 
+  it("validates room upload content by magic bytes and chooses the extension", async () => {
+    const fakeForm = new FormData();
+    fakeForm.append(
+      "image",
+      new Blob([Buffer.from("<html>not an image</html>")], { type: "image/png" }),
+      "forged.html"
+    );
+    const fakeResponse = await fetch(`${baseUrl}/api/rooms/upload-image`, {
+      method: "POST",
+      headers: authHeader(adminToken),
+      body: fakeForm,
+    });
+    assert.equal(fakeResponse.status, 400);
+
+    const pngBytes = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z5uEAAAAASUVORK5CYII=",
+      "base64"
+    );
+    const validForm = new FormData();
+    validForm.append("image", new Blob([pngBytes], { type: "text/html" }), "forged.html");
+    const validResponse = await fetch(`${baseUrl}/api/rooms/upload-image`, {
+      method: "POST",
+      headers: authHeader(adminToken),
+      body: validForm,
+    });
+    const validBody = await validResponse.json();
+    assert.equal(validResponse.status, 201);
+    assert.match(validBody.image, /\/uploads\/rooms\/[0-9a-f-]+\.png$/i);
+
+    const filename = new URL(validBody.image).pathname.split("/").pop();
+    await fs.unlink(path.join(__dirname, "../uploads/rooms", filename));
+  });
+
   it("allows admin user management and rejects normal users", async () => {
     const forbidden = await request(baseUrl, "/api/users", {
       headers: authHeader(userToken),
@@ -777,6 +942,138 @@ describe("hotel booking API", () => {
       }),
     });
     assert.equal(invalid.response.status, 400);
+  });
+
+  it("forces admin-created users to replace their temporary password", async () => {
+    const created = await request(baseUrl, "/api/users", {
+      method: "POST",
+      headers: authHeader(adminToken),
+      body: JSON.stringify({
+        name: "Invited User",
+        email: "invited@example.com",
+        password: "Temporary-Password-42",
+        role: "user",
+      }),
+    });
+    assert.equal(created.response.status, 201);
+    assert.equal(created.body.user.must_change_password, true);
+
+    const login = await request(baseUrl, "/api/login", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "invited@example.com",
+        password: "Temporary-Password-42",
+      }),
+    });
+    const invitedCookie = authCookie(login);
+
+    const blocked = await request(baseUrl, "/api/bookings", {
+      headers: authHeader(invitedCookie),
+    });
+    assert.equal(blocked.response.status, 403);
+    assert.equal(blocked.body.code, "PASSWORD_CHANGE_REQUIRED");
+
+    const changed = await request(baseUrl, "/api/users/me/password", {
+      method: "PUT",
+      headers: authHeader(invitedCookie),
+      body: JSON.stringify({
+        currentPassword: "Temporary-Password-42",
+        newPassword: "Personal-Password-84",
+      }),
+    });
+    assert.equal(changed.response.status, 200);
+    const refreshedCookie = authCookie(changed);
+
+    const allowed = await request(baseUrl, "/api/bookings", {
+      headers: authHeader(refreshedCookie),
+    });
+    assert.equal(allowed.response.status, 200);
+  });
+
+  it("re-reads current roles and rejects revoked token versions", async () => {
+    const admin = state.users.find((item) => item.id === 1);
+    admin.role = "user";
+
+    const roleRevoked = await request(baseUrl, "/api/dashboard/stats", {
+      headers: authHeader(adminToken),
+    });
+    assert.equal(roleRevoked.response.status, 403);
+
+    admin.role = "admin";
+    admin.token_version += 1;
+    const versionRevoked = await request(baseUrl, "/api/dashboard/stats", {
+      headers: authHeader(adminToken),
+    });
+    assert.equal(versionRevoked.response.status, 401);
+
+    admin.token_version -= 1;
+  });
+
+  it("rejects expired and incorrectly signed application JWTs", async () => {
+    const expired = jwt.sign(
+      { id: 1, role: "admin", tokenVersion: 0 },
+      process.env.JWT_SECRET,
+      { expiresIn: -1 }
+    );
+    const forged = jwt.sign(
+      { id: 1, role: "admin", tokenVersion: 0 },
+      "incorrect-secret",
+      { expiresIn: "1h" }
+    );
+
+    for (const token of [expired, forged]) {
+      const result = await request(baseUrl, "/api/dashboard/stats", {
+        headers: { Cookie: `luxestay_session=${token}` },
+      });
+      assert.equal(result.response.status, 401);
+    }
+  });
+
+  it("global error responses never expose stack traces", () => {
+    const { globalErrorHandler } = require("../src/middleware/errorHandler");
+    const sensitiveError = new Error("database password appeared here");
+    let status;
+    let body;
+    const originalConsoleError = console.error;
+    console.error = () => {};
+    try {
+      globalErrorHandler(
+        sensitiveError,
+        { method: "GET", originalUrl: "/api/failure" },
+        {
+          headersSent: false,
+          status(code) { status = code; return this; },
+          json(value) { body = value; return this; },
+        },
+        () => {}
+      );
+    } finally {
+      console.error = originalConsoleError;
+    }
+    assert.equal(status, 500);
+    assert.deepEqual(body, { message: "Internal server error" });
+    assert.equal(JSON.stringify(body).includes("database password"), false);
+    assert.equal(JSON.stringify(body).includes("stack"), false);
+  });
+
+  it("uses Secure SameSite=None auth cookies by default in production", () => {
+    const { getAuthCookieOptions } = require("../src/services/authSession");
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousSecure = process.env.AUTH_COOKIE_SECURE;
+    const previousSameSite = process.env.AUTH_COOKIE_SAME_SITE;
+    try {
+      process.env.NODE_ENV = "production";
+      delete process.env.AUTH_COOKIE_SECURE;
+      delete process.env.AUTH_COOKIE_SAME_SITE;
+      const options = getAuthCookieOptions();
+      assert.equal(options.httpOnly, true);
+      assert.equal(options.secure, true);
+      assert.equal(options.sameSite, "none");
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+      process.env.AUTH_COOKIE_SECURE = previousSecure;
+      process.env.AUTH_COOKIE_SAME_SITE = previousSameSite;
+    }
   });
 
   it("lets authenticated users manage their own profile and password", async () => {
@@ -830,6 +1127,7 @@ describe("hotel booking API", () => {
 
     assert.equal(wrongPassword.response.status, 400);
 
+    const previousSession = userToken;
     const changedPassword = await request(baseUrl, "/api/users/me/password", {
       method: "PUT",
       headers: authHeader(userToken),
@@ -840,6 +1138,12 @@ describe("hotel booking API", () => {
     });
 
     assert.equal(changedPassword.response.status, 200);
+    authCookie(changedPassword);
+
+    const revokedSession = await request(baseUrl, "/api/bookings", {
+      headers: authHeader(previousSession),
+    });
+    assert.equal(revokedSession.response.status, 401);
 
     const oldLogin = await request(baseUrl, "/api/login", {
       method: "POST",
@@ -859,6 +1163,7 @@ describe("hotel booking API", () => {
     });
     assert.equal(newLogin.response.status, 200);
     assert.equal(newLogin.body.user.password, undefined);
+    userToken = authCookie(newLogin);
   });
 
   it("returns dashboard stats for admin only", async () => {
@@ -898,6 +1203,31 @@ describe("hotel booking API", () => {
     assert.ok(Array.isArray(analytics.body.recentBookings));
   });
 
+  it("allows only the exact configured CORS origin for cookie mutations", async () => {
+    const allowed = await fetch(`${baseUrl}/api/rooms`, {
+      headers: { Origin: "http://localhost:5173" },
+    });
+    assert.equal(
+      allowed.headers.get("access-control-allow-origin"),
+      "http://localhost:5173"
+    );
+
+    const blocked = await request(baseUrl, "/api/rooms", {
+      method: "POST",
+      headers: {
+        ...authHeader(adminToken),
+        Origin: "https://attacker.vercel.app",
+      },
+      body: JSON.stringify({
+        room_name: "CSRF Room",
+        room_type: "Invalid",
+        price: 1,
+        capacity: 1,
+      }),
+    });
+    assert.equal(blocked.response.status, 403);
+  });
+
   it("scopes bookings by role and validates booking payloads", async () => {
     const noToken = await request(baseUrl, "/api/bookings");
     assert.equal(noToken.response.status, 401);
@@ -935,6 +1265,17 @@ describe("hotel booking API", () => {
     assert.equal(created.response.status, 201);
     assert.equal(created.body.nights, 2);
     assert.equal(created.body.total_price, 200);
+    assert.equal(created.body.booking.guests, 2);
+  });
+
+  it("returns 400 for invalid room and booking ids", async () => {
+    const room = await request(baseUrl, "/api/rooms/not-a-number");
+    assert.equal(room.response.status, 400);
+
+    const booking = await request(baseUrl, "/api/bookings/not-a-number", {
+      headers: authHeader(userToken),
+    });
+    assert.equal(booking.response.status, 400);
   });
 
   it("lets admins update booking status and users cancel own bookings", async () => {
@@ -952,5 +1293,19 @@ describe("hotel booking API", () => {
     });
     assert.equal(cancelled.response.status, 200);
     assert.equal(cancelled.body.booking.status, "cancelled");
+  });
+
+  it("soft deletes users without deleting booking history", async () => {
+    const bookingsBefore = state.bookings.filter((item) => item.user_id === 2).length;
+    const deleted = await request(baseUrl, "/api/users/2", {
+      method: "DELETE",
+      headers: authHeader(adminToken),
+    });
+    assert.equal(deleted.response.status, 200);
+    assert.ok(state.users.find((item) => item.id === 2).deleted_at);
+    assert.equal(
+      state.bookings.filter((item) => item.user_id === 2).length,
+      bookingsBefore
+    );
   });
 });
