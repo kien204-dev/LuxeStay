@@ -3,16 +3,27 @@ import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyADH2bp68nEQxRcgGXq83zZUR21cABHOe0",
-  authDomain: "booking-hotel-be19e.firebaseapp.com",
-  projectId: "booking-hotel-be19e",
-  storageBucket: "booking-hotel-be19e.firebasestorage.app",
-  messagingSenderId: "915958805225",
-  appId: "1:915958805225:web:27755a6248d5c8965cb678",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
+
+const missingFirebaseVariables = Object.entries(firebaseConfig)
+  .filter(([, value]) => !value)
+  .map(([name]) => name);
+
+if (missingFirebaseVariables.length > 0) {
+  throw new Error(
+    `Firebase configuration is missing: ${missingFirebaseVariables.join(", ")}`
+  );
+}
 
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 export const provider = new GoogleAuthProvider();
-export const db = getFirestore(app); 
+provider.setCustomParameters({ prompt: "select_account" });
+export const db = getFirestore(app);

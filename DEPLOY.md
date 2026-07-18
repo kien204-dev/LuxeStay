@@ -92,6 +92,9 @@ SMTP_PASS=your_smtp_password
 SMTP_FROM="LuxeStay <no-reply@example.com>"
 ```
 
+`SMTP_PASSWORD` is accepted as an alias for `SMTP_PASS`. For Gmail, use an
+App Password instead of the normal account password.
+
 After deployment, verify:
 
 - `https://your-render-service.onrender.com/`
@@ -106,11 +109,22 @@ Create a new Vercel project:
 - Build Command: `npm run build`
 - Output Directory: `dist`
 
-Add this environment variable in Vercel:
+Add these environment variables in Vercel for Production (and Preview if that
+environment is used for testing):
 
 ```env
 VITE_API_URL=https://your-render-service.onrender.com/api
+VITE_FIREBASE_API_KEY=your_firebase_web_api_key
+VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your_project_id
+VITE_FIREBASE_STORAGE_BUCKET=your_project.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+VITE_FIREBASE_APP_ID=your_web_app_id
 ```
+
+In Firebase Console, add the exact production hostname (for this project,
+`luxe-stay-three.vercel.app`) under Authentication > Settings > Authorized
+domains.
 
 The file `front-end/vercel.json` contains the rewrite required for React Router SPA navigation.
 
@@ -139,6 +153,9 @@ npm run build
 - `JWT_SECRET` is long and unique in production.
 - `CLIENT_URL` and `FRONTEND_URL` point to the Vercel app URL.
 - `VITE_API_URL` points to the Render backend URL with `/api`.
+- All six `VITE_FIREBASE_*` variables are configured in Vercel.
+- The exact Vercel hostname is present in Firebase Authorized domains.
+- SMTP transport verification succeeds and a password-reset email reaches a real inbox.
 - Database migrations were run successfully.
 - Room image uploads are understood as runtime files and are not committed.
 - Login, booking, room list, dashboard, profile, and password reset are tested after deploy.

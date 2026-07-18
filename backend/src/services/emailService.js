@@ -6,7 +6,7 @@ function getSmtpConfig() {
     port: Number(process.env.SMTP_PORT || 587),
     secure: String(process.env.SMTP_SECURE).toLowerCase() === "true",
     user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
+    pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD,
     from: process.env.SMTP_FROM,
   };
 }
@@ -18,7 +18,7 @@ function assertEmailConfigured() {
   if (!config.host) missing.push("SMTP_HOST");
   if (!process.env.SMTP_PORT) missing.push("SMTP_PORT");
   if (!config.user) missing.push("SMTP_USER");
-  if (!config.pass) missing.push("SMTP_PASS");
+  if (!config.pass) missing.push("SMTP_PASS (or SMTP_PASSWORD)");
   if (!config.from) missing.push("SMTP_FROM");
 
   if (missing.length > 0) {

@@ -341,6 +341,18 @@ function Booking() {
                     </>
                 )}
 
+                {user?.role !== "admin" && (
+                    <p
+                        onClick={() => {
+                            navigate("/settings");
+                            setOpenSidebar(false);
+                        }}
+                        style={menuStyle}
+                    >
+                        Cài đặt tài khoản
+                    </p>
+                )}
+
                 <p
                     onClick={() => {
                         navigate("/my-bookings");
@@ -402,6 +414,21 @@ function Booking() {
                         >
                             {user?.name}
                         </span>
+
+                        <button
+                            onClick={() => navigate("/settings")}
+                            style={{
+                                padding: "8px 14px",
+                                border: "1px solid #002366",
+                                background: "transparent",
+                                color: "#002366",
+                                cursor: "pointer",
+                                borderRadius: 6,
+                                fontSize: 13,
+                            }}
+                        >
+                            Settings
+                        </button>
 
                         <button
                             onClick={() => navigate("/my-bookings")}

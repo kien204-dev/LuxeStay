@@ -4,6 +4,10 @@ import { signInWithPopup } from "firebase/auth";
 import { auth, provider } from "../firebase";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import {
+    getGoogleAuthErrorMessage,
+    logGoogleAuthError,
+} from "../utils/googleAuthError";
 
 export default function Register() {
 
@@ -72,11 +76,8 @@ const handleChange = (e) => {
             redirectByRole(res.data.user);
 
         } catch (err) {
-            setErrors({
-                general:
-                    err.response?.data?.message ||
-                    "Đăng nhập Google thất bại",
-            });
+            logGoogleAuthError(err);
+            setErrors({ general: getGoogleAuthErrorMessage(err) });
         } finally {
             setLoading(false);
         }
