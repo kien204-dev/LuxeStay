@@ -1,4 +1,6 @@
 const nodemailer = require("nodemailer");
+const dns = require("node:dns").promises;
+const net = require("node:net");
 
 function getSmtpConfig() {
   return {
@@ -28,15 +30,31 @@ function assertEmailConfigured() {
   return config;
 }
 
+async function resolveSmtpIpv4(host, lookup = dns.lookup) {
+  if (net.isIPv4(host)) return host;
+
+  const result = await lookup(host, { family: 4 });
+  if (!result?.address || !net.isIPv4(result.address)) {
+    throw new Error(`SMTP host ${host} did not resolve to an IPv4 address`);
+  }
+
+  return result.address;
+}
+
 async function sendPasswordResetEmail({ to, name, resetUrl }) {
   const config = assertEmailConfigured();
+  const ipv4Host = await resolveSmtpIpv4(config.host);
   const transporter = nodemailer.createTransport({
-    host: config.host,
+    host: ipv4Host,
     port: config.port,
     secure: config.secure,
-    // Render does not provide reliable outbound IPv6 connectivity. Gmail can
-    // resolve to an IPv6 address first, which otherwise fails with ENETUNREACH.
+    // Keep this option for Node transports that honor it. Resolving the host
+    // above is what guarantees IPv4 with Nodemailer 9's own DNS resolver.
     family: 4,
+    tls: {
+      // TLS certificate verification must still use the original SMTP hostname.
+      servername: config.host,
+    },
     auth: {
       user: config.user,
       pass: config.pass,
@@ -66,5 +84,6 @@ async function sendPasswordResetEmail({ to, name, resetUrl }) {
 
 module.exports = {
   assertEmailConfigured,
+  resolveSmtpIpv4,
   sendPasswordResetEmail,
 };
