@@ -34,6 +34,9 @@ async function sendPasswordResetEmail({ to, name, resetUrl }) {
     host: config.host,
     port: config.port,
     secure: config.secure,
+    // Render does not provide reliable outbound IPv6 connectivity. Gmail can
+    // resolve to an IPv6 address first, which otherwise fails with ENETUNREACH.
+    family: 4,
     auth: {
       user: config.user,
       pass: config.pass,
